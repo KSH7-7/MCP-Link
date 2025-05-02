@@ -3,7 +3,7 @@
 
 ### Custom ###
 # Environment configuration files
-secret.properties
+secret.yml
 
 ### Eclipse ###
 .metadata
