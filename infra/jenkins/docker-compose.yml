@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   jenkins:
+    user: "root"
     container_name: jenkins
     build:
       context: .

@@ -20,4 +20,4 @@ COPY --from=builder /app/build/libs/mcplink-0.0.1-SNAPSHOT.jar /app/mcplink.jar
 
 ENTRYPOINT ["java", "-jar", "/app/mcplink.jar"]
 
-EXPOSE 8081
+EXPOSE 8080
