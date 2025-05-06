@@ -127,6 +127,9 @@ dist
 .yarn/build-state.yml
 .pnp.*
 
+# Environment files
+.env
+
 # Environment files specific to OS
 *.swp
 *~
