@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  jenkins:
+    user: "root"
+    container_name: jenkins
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9090:8080"
+    volumes:
+      - /home/ubuntu/jenkins-data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      TZ: Asia/Seoul
+      JENKINS_OPTS: "--prefix=/jenkins"
+
+    networks:
+      - mcplink-network
+
+networks:
+  mcplink-network:
+    driver: bridge
+
+volumes:
+  jenkins_home:

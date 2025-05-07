@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  backend:
+    container_name: backend
+
+    image: resd/backend:${BACKEND_IMAGE_TAG} # deploy.sh에 있는 값 읽음
+
+    ports:
+      - 8081:8080
+
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock
+#      - /usr/bin/docker:/usr/bin/docker
+#      - /home/ubuntu/jenkins-data:/var/jenkins_home
+#      - /home/ubuntu/link:/home/ubuntu/link
+
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+      DB_HOST: mongodb
+      DB_PORT: 27017
+      DB_NAME: ${MONGO_INITDB_DATABASE:-mydatabase} # MongoDB 초기 DB 이름 변수와 일치
+      DB_USER: ${MONGO_APP_USER} # 애플리케이션이 사용할 MongoDB 사용자 이름 변수
+      DB_PASSWORD: ${MONGO_APP_PASSWORD} # 애플리케이션이 사용할 MongoDB 비밀번호 변수
+
+    networks:
+      - mcplink-network
+
+  mongodb:
+    container_name: mongodb
+
+    image: mongo:6.0
+
+    ports:
+      - 0.0.0.0:27017:27017
+
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME} # .env 가져올 변수명
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD} # .env 가져올 변수명
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-mydatabase} # .env 가져오거나 기본값 사용
+
+    volumes:
+      # 'mongodb_data'라는 이름의 볼륨을 컨테이너 내부 MongoDB 데이터 디렉토리에 마운트
+      - mongodb_data:/data/db
+
+    networks:
+      - mcplink-network
+
+
+networks:
+  mcplink-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:

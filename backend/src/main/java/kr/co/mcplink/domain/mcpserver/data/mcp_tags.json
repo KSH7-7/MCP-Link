@@ -1,0 +1,210 @@
+[
+    {
+        "seq": 1,
+        "tag": "AWS"
+    },
+    {
+        "seq": 2,
+        "tag": "aws"
+    },
+    {
+        "seq": 3,
+        "tag": "BRAVE"
+    },
+    {
+        "seq": 4,
+        "tag": "brave"
+    },
+    {
+        "seq": 5,
+        "tag": "SEARCH"
+    },
+    {
+        "seq": 6,
+        "tag": "search"
+    },
+    {
+        "seq": 7,
+        "tag": "EVERART"
+    },
+    {
+        "seq": 8,
+        "tag": "everart"
+    },
+    {
+        "seq": 9,
+        "tag": "EVERYTHING"
+    },
+    {
+        "seq": 10,
+        "tag": "everything"
+    },
+    {
+        "seq": 11,
+        "tag": "FETCH"
+    },
+    {
+        "seq": 12,
+        "tag": "fetch"
+    },
+    {
+        "seq": 13,
+        "tag": "FILESYSTEM"
+    },
+    {
+        "seq": 14,
+        "tag": "filesystem"
+    },
+    {
+        "seq": 15,
+        "tag": "FILE"
+    },
+    {
+        "seq": 16,
+        "tag": "file"
+    },
+    {
+        "seq": 17,
+        "tag": "SYSTEM"
+    },
+    {
+        "seq": 18,
+        "tag": "system"
+    },
+    {
+        "seq": 19,
+        "tag": "GIT"
+    },
+    {
+        "seq": 20,
+        "tag": "git"
+    },
+    {
+        "seq": 21,
+        "tag": "GITHUB"
+    },
+    {
+        "seq": 22,
+        "tag": "github"
+    },
+    {
+        "seq": 23,
+        "tag": "GITLAB"
+    },
+    {
+        "seq": 24,
+        "tag": "gitlab"
+    },
+    {
+        "seq": 25,
+        "tag": "DRIVE"
+    },
+    {
+        "seq": 26,
+        "tag": "drive"
+    },
+    {
+        "seq": 27,
+        "tag": "GOOGLE"
+    },
+    {
+        "seq": 28,
+        "tag": "google"
+    },
+    {
+        "seq": 29,
+        "tag": "MAP"
+    },
+    {
+        "seq": 30,
+        "tag": "map"
+    },
+    {
+        "seq": 31,
+        "tag": "MEMORY"
+    },
+    {
+        "seq": 32,
+        "tag": "memory"
+    },
+    {
+        "seq": 33,
+        "tag": "POSTGRES"
+    },
+    {
+        "seq": 34,
+        "tag": "postgres"
+    },
+    {
+        "seq": 35,
+        "tag": "PUPPETEER"
+    },
+    {
+        "seq": 36,
+        "tag": "puppeteer"
+    },
+    {
+        "seq": 37,
+        "tag": "REDIS"
+    },
+    {
+        "seq": 38,
+        "tag": "redis"
+    },
+    {
+        "seq": 39,
+        "tag": "SENTRY"
+    },
+    {
+        "seq": 40,
+        "tag": "sentry"
+    },
+    {
+        "seq": 41,
+        "tag": "SEQUENTIAL"
+    },
+    {
+        "seq": 42,
+        "tag": "sequential"
+    },
+    {
+        "seq": 43,
+        "tag": "THINKING"
+    },
+    {
+        "seq": 44,
+        "tag": "thinking"
+    },
+    {
+        "seq": 45,
+        "tag": "THINK"
+    },
+    {
+        "seq": 46,
+        "tag": "think"
+    },
+    {
+        "seq": 47,
+        "tag": "SLACK"
+    },
+    {
+        "seq": 48,
+        "tag": "slack"
+    },
+    {
+        "seq": 49,
+        "tag": "SQLITE"
+    },
+    {
+        "seq": 50,
+        "tag": "sqlite"
+    },
+    {
+        "seq": 51,
+        "tag": "TIME"
+    },
+    {
+        "seq": 52,
+        "tag": "time"
+    }
+]

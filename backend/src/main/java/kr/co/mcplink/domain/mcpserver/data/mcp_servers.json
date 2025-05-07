@@ -1,0 +1,468 @@
+[
+  {
+    "seq": 1,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/aws-kb-retrieval-server",
+    "stars": 1131,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "AWS",
+      "aws"
+    ],
+    "mcpServers": {
+      "name": "aws-kb-retrieval",
+      "description": "Query and retrieve information from AWS knowledge bases using the Bedrock Agent Runtime.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-aws-kb-retrieval"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_HERE",
+        "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY_HERE",
+        "AWS_REGION": "YOUR_AWS_REGION_HERE"
+      }
+    }
+  },
+  {
+    "seq": 2,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+    "stars": 2312,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "BRAVE",
+      "brave",
+      "SEARCH",
+      "search"
+    ],
+    "mcpServers": {
+      "name": "brave-search",
+      "description": "Retrieve web pages, news, and local business results via Brave API.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "YOUR_API_KEY_HERE"
+      }
+    }
+  },
+  {
+    "seq": 3,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/everart",
+    "stars": 2342,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "EVERART",
+      "everart"
+    ],
+    "mcpServers": {
+      "name": "everart",
+      "description": "Integrates with EverArt API to generate images from text prompts using multiple AI models for creative and visual design tasks.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-everart"
+      ],
+      "env": {
+        "EVERART_API_KEY": "your_key_here"
+      }
+    }
+  },
+  {
+    "seq": 4,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
+    "stars": 2341,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "EVERYTHING",
+      "everything"
+    ],
+    "mcpServers": {
+      "name": "everything",
+      "description": "Test protocol features and tools for client compatibility.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-everything"
+      ]
+    }
+  },
+  {
+    "seq": 5,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+    "stars": 423324,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "FETCH",
+      "fetch"
+    ],
+    "mcpServers": {
+      "name": "fetch",
+      "description": "Retrieve and convert web content to markdown for analysis.",
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ]
+    }
+  },
+  {
+    "seq": 6,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+    "stars": 1235412,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "FILESYSTEM",
+      "filesystem",
+      "FILE",
+      "file",
+      "SYSTEM",
+      "system"
+    ],
+    "mcpServers": {
+      "name": "filesystem",
+      "description": "Provides a secure interface for interacting with local filesystems, enabling file reading, writing, updating, and directory management with robust path resolution and security measures.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/username/Desktop",
+        "/path/to/other/allowed/dir"
+      ]
+    }
+  },
+  {
+    "seq": 7,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+    "stars": 1341,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "GIT",
+      "git"
+    ],
+    "mcpServers": {
+      "name": "git",
+      "description": "Interact with local Git repositories for version control tasks.",
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "path/to/git/repo"
+      ]
+    }
+  },
+  {
+    "seq": 8,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
+    "stars": 889832,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "GITHUB",
+      "github"
+    ],
+    "mcpServers": {
+      "name": "github",
+      "description": "Manage repositories, issues, and search code via GitHub API.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      }
+    }
+  },
+  {
+    "seq": 9,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab",
+    "stars": 21213,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "GITLAB",
+      "gitlab"
+    ],
+    "mcpServers": {
+      "name": "gitlab",
+      "description": "Control repositories, merge requests, and issues via GitLab API.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-gitlab"
+      ],
+      "env": {
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>",
+        "GITLAB_API_URL": "https://gitlab.com/api/v4 // Optional, for self-hosted instances"
+      }
+    }
+  },
+  {
+    "seq": 10,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive",
+    "stars": 22111,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "DRIVE",
+      "drive"
+    ],
+    "mcpServers": {
+      "name": "gdrive",
+      "description": "Search and access Google Drive files and folders via read-only API.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-gdrive"
+      ]
+    }
+  },
+  {
+    "seq": 11,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/google-maps",
+    "stars": 4443,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "GOOGLE",
+      "google",
+      "MAP",
+      "map"
+    ],
+    "mcpServers": {
+      "name": "google-maps",
+      "description": "Access location data, geocoding, and place details through Maps API.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-google-maps"
+      ],
+      "env": {
+        "GOOGLE_MAPS_API_KEY": "<YOUR_API_KEY>"
+      }
+    }
+  },
+  {
+    "seq": 12,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+    "stars": 331211,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "MEMORY",
+      "memory"
+    ],
+    "mcpServers": {
+      "name": "memory",
+      "description": "Build and query persistent semantic networks for data management.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ]
+    }
+  },
+  {
+    "seq": 13,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+    "stars": 54353,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "POSTGRES",
+      "postgres"
+    ],
+    "mcpServers": {
+      "name": "postgres",
+      "description": "Access and analyze Postgres databases with read-only queries.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://localhost/mydb"
+      ]
+    }
+  },
+  {
+    "seq": 14,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
+    "stars": 123,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "PUPPETEER",
+      "puppeteer"
+    ],
+    "mcpServers": {
+      "name": "puppeteer",
+      "description": "Navigate websites, fill forms, and capture screenshots programmatically.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-puppeteer"
+      ]
+    }
+  },
+  {
+    "seq": 15,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/redis",
+    "stars": 31313,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "REDIS",
+      "redis"
+    ],
+    "mcpServers": {
+      "name": "redis",
+      "description": "Integrates with Redis databases to enable fast, in-memory key-value operations for caching, session management, and real-time data processing.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-redis",
+        "redis://localhost:6379"
+      ]
+    }
+  },
+  {
+    "seq": 16,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sentry",
+    "stars": 3131344,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "SENTRY",
+      "sentry"
+    ],
+    "mcpServers": {
+      "name": "sentry",
+      "description": "Retrieve and analyze application error reports for debugging support.",
+      "command": "uvx",
+      "args": [
+        "mcp-server-sentry",
+        "--auth-token",
+        "YOUR_SENTRY_TOKEN"
+      ]
+    }
+  },
+  {
+    "seq": 17,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
+    "stars": 22241,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "SEQUENTIAL",
+      "sequential",
+      "THINKING",
+      "thinking",
+      "THINK",
+      "think"
+    ],
+    "mcpServers": {
+      "name": "sequential-thinking",
+      "description": "Implements a structured sequential thinking process for breaking down complex problems, iteratively refining solutions, and exploring multiple reasoning paths.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    }
+  },
+  {
+    "seq": 18,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
+    "stars": 8478,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "SLACK",
+      "slack"
+    ],
+    "mcpServers": {
+      "name": "slack",
+      "description": "Send messages, manage channels, and access workspace history.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-slack"
+      ],
+      "env": {
+        "SLACK_BOT_TOKEN": "xoxb-your-bot-token",
+        "SLACK_TEAM_ID": "T01234567",
+        "SLACK_CHANNEL_IDS": "C01234567, C76543210"
+      }
+    }
+  },
+  {
+    "seq": 19,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite",
+    "stars": 31213,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "SQLITE",
+      "sqlite"
+    ],
+    "mcpServers": {
+      "name": "sqlite",
+      "description": "Query and analyze SQLite databases directly.",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "parent_of_servers_repo/servers/src/sqlite",
+        "run",
+        "mcp-server-sqlite",
+        "--db-path",
+        "~/test.db"
+      ]
+    }
+  },
+  {
+    "seq": 20,
+    "type": "STDIO",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
+    "stars": 12213,
+    "views": 0,
+    "scanned": true,
+    "tags": [
+      "TIME",
+      "time"
+    ],
+    "mcpServers": {
+      "name": "time",
+      "description": "MCP server providing time and timezone conversion tools for AI assistants to handle localized time data and calculations.",
+      "command": "uvx",
+      "args": [
+        "mcp-server-time"
+      ]
+    }
+  }
+]
