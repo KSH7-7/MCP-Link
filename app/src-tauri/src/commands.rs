@@ -47,14 +47,12 @@ pub async fn get_mcp_data(
     state: State<'_, AppState>,
     search_term: Option<String>,
 ) -> Result<Vec<MCPCard>, String> {
+    let new_base_url = "http://localhost:8081/api"; // new local server address (8081 port)
     let url = if let Some(term) = &search_term {
         let encoded_term = urlencoding::encode(term);
-        format!(
-            "http://localhost:8080/api/mcp-cards?search={}",
-            encoded_term
-        )
+        format!("{}?search={}", new_base_url, encoded_term)
     } else {
-        "http://localhost:8080/api/mcp-cards".to_string()
+        new_base_url.to_string()
     };
 
     // API 요청 보내기
