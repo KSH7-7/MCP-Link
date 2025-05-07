@@ -5,5 +5,8 @@ import java.util.List;
 import kr.co.mcplink.domain.mcpserver.dto.McpSummaryDataDto;
 import kr.co.mcplink.domain.mcpserver.dto.PageInfoDto;
 
-public record McpListResponse(PageInfoDto pageInfo, List<McpSummaryDataDto> data) {
+public record McpSearchByNameResponse(
+	PageInfoDto pageInfo,
+	List<McpSummaryDataDto> mcpSummaryData
+) {
 }

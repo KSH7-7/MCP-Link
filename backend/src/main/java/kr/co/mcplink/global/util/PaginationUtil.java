@@ -1,6 +1,6 @@
 package kr.co.mcplink.global.util;
 
-import kr.co.mcplink.domain.mcpserver.dto.common.PageInfoDto;
+import kr.co.mcplink.domain.mcpserver.dto.PageInfoDto;
 import kr.co.mcplink.domain.mcpserver.entity.McpServer;
 import kr.co.mcplink.global.common.Constants;
 

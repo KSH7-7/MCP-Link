@@ -1,4 +1,4 @@
-package kr.co.mcplink.domain.mcpserver.dto.common;
+package kr.co.mcplink.domain.mcpserver.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;

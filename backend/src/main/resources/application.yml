@@ -17,3 +17,9 @@ spring:
       database: ${mongodb.database}
       username: ${mongodb.username}
       password: ${mongodb.password}
+
+server:
+  http2:
+    enabled: true
+  servlet:
+    context-path: /api
