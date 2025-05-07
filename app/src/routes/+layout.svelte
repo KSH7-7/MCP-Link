@@ -1,29 +1,39 @@
 <script lang="ts">
   import "../app.css";
-  import Select from "../lib/components/select.svelte";
   import { onMount } from 'svelte';
   import type { Window } from '@tauri-apps/api/window';
-  import { Presentation, SearchCode, Cog, Minus, X, Square, BookDashed } from 'lucide-svelte';
+  import { Presentation, Cog, Minus, X, Square, Settings } from 'lucide-svelte';
   
-  // Tauri 창 객체를 저장할 변수 초기화
+  // Tauri window object to save
   let tauriWindow: Window | null = null;
+  // OS platform detection
+  let platform: string = 'unknown';
   
   onMount(async () => {
-    
-    // Tauri API가 있는지 확인
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    // Check if Tauri API exists
+    if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
       try {
-        // 현재 창 가져오기 - Tauri v2용 API
+        // Get current window - Tauri v2 API
         const { getCurrentWindow } = await import('@tauri-apps/api/window');
         tauriWindow = getCurrentWindow();
+        
+        // OS type detection
+        const { platform: getPlatform } = await import('@tauri-apps/plugin-os');
+        platform = await getPlatform();
       } catch (error) {
-        console.error('error: get current window', error);
+        console.error('error: get current window or platform', error);
       }
     } else {
+      // If running in the browser (use Navigator API)
+      if (typeof navigator !== 'undefined') {
+        if (navigator.userAgent.indexOf('Win') !== -1) platform = 'win32';
+        else if (navigator.userAgent.indexOf('Mac') !== -1) platform = 'darwin';
+        else if (navigator.userAgent.indexOf('Linux') !== -1) platform = 'linux';
+      }
     }
   });
   
-  // 최소화 버튼 핸들러
+  // Minimize button handler
   async function minimizeWindow() {
     if (tauriWindow) {
       try {
@@ -34,7 +44,7 @@
     }
   }
   
-  // 최대화 버튼 핸들러
+  // Maximize button handler
   async function maximizeWindow() {
     if (tauriWindow) {
       try {
@@ -50,7 +60,7 @@
     }
   }
   
-  // 트레이로 숨기기 버튼 핸들러
+  // Hide to tray button handler
   async function hideToTray() {
     if (tauriWindow) {
       try {
@@ -60,85 +70,129 @@
       }
     }
   }
+
+  // Current active tab
+  let activeTab = "/";
+
+  // Tab information and colors
+  const tabs = [
+    { path: "/Installed-MCP", name: "Installed MCP", icon: Presentation, color: "#eef2ff", hoverColor: "#eef2ff", bgColor: "#eef2ff" },
+    { path: "/MCP-list", name: "MCP List", icon: Cog, color: "#ecfdf5", hoverColor: "#ecfdf5", bgColor: "#ecfdf5" },
+  ];
+  
+  // Settings tab (placed on the right)
+  const settingsTab = { path: "/settings", name: "Settings", icon: Settings, color: "#f3f4f6", hoverColor: "#f3f4f6", bgColor: "#f3f4f6" };
+
+  // Background color of the current active tab
+  $: activeTabBgColor = settingsTab.path === activeTab 
+    ? settingsTab.bgColor 
+    : tabs.find(tab => tab.path === activeTab)?.bgColor || "#f8fafc";
 </script>
 
-<div class="flex h-screen overflow-hidden bg-base-200">
-  <div class="w-64 bg-base-100 shadow-lg">
-    <div class="flex flex-col h-full">
-      <!-- <Select /> -->
-      <nav class="flex-1 mt-15">
-        <ul>
-          <li class="mb-3">
-            <a href="/" class="flex items-center p-3 rounded hover:bg-base-200">
-              <Presentation />
-                <span class="ml-3">Dashboard</span>
-            </a>
-          </li>
-          <li class="mb-2">
-            <a href="/search" class="flex items-center p-3 rounded hover:bg-base-200">
-              <SearchCode />
-                <span class="ml-3">Search MCP</span>
-            </a>
-          </li>
-          <li class="mb-2">
-            <a href="#settings" class="flex items-center p-3 rounded hover:bg-base-200">
-              <Cog />
-                <span class="ml-3">Settings</span>
-            </a>
-          </li>
-          <li class="mb-2">
-            <a href="/detail" class="flex items-center p-3 rounded hover:bg-base-200">
-              <BookDashed />
-                <span class="ml-3">임시(디테일)</span>
-            </a>
-          </li>
-        </ul>
-      </nav>
-    </div>
-  </div>
-
-  <div class="flex-1 flex flex-col overflow-hidden">
-    <!-- 상단바 - 드래그 가능하고 투명 배경으로 변경 -->
+<div class="flex flex-col h-screen overflow-hidden">
+  <div class="flex flex-col overflow-hidden">
+    <!-- Top bar - draggable and transparent background -->
     <div class="bg-transparent p-2 flex justify-between border-b border-transparent titlebar">
       <div class="flex-1 drag-region"></div>
-      <div class="flex">
-        <button
-          on:click|preventDefault|stopPropagation={minimizeWindow}
-          title="Minimize"
-          aria-label="window minimize"
-          class="mr-2 text-base-content opacity-70 hover:opacity-100"
+      
+      {#if platform === 'darwin'}
+        <!-- macOS style window controls (left side) -->
+        <div class="flex ml-2 order-first">
+          <button
+            on:click|preventDefault|stopPropagation={hideToTray}
+            title="Close"
+            aria-label="window close"
+            class="mr-2 text-red-500 bg-red-500 rounded-full w-3 h-3 flex items-center justify-center hover:text-red-700"
+          >
+          </button>
+          
+          <button
+            on:click|preventDefault|stopPropagation={minimizeWindow}
+            title="Minimize"
+            aria-label="window minimize"
+            class="mr-2 text-yellow-500 bg-yellow-500 rounded-full w-3 h-3 flex items-center justify-center hover:text-yellow-700"
+          >
+          </button>
+          
+          <button
+            on:click|preventDefault|stopPropagation={maximizeWindow}
+            title="Maximize"
+            aria-label="window maximize"
+            class="text-green-500 bg-green-500 rounded-full w-3 h-3 flex items-center justify-center hover:text-green-700"
+          >
+          </button>
+        </div>
+      {:else}
+        <!-- Windows/Linux style window controls (right side) -->
+        <div class="flex">
+          <button
+            on:click|preventDefault|stopPropagation={minimizeWindow}
+            title="Minimize"
+            aria-label="window minimize"
+            class="mr-2 text-base-content opacity-70 hover:opacity-100"
+          >
+          <Minus class="w-5 h-5" />
+          </button>
+          
+          <button
+            on:click|preventDefault|stopPropagation={maximizeWindow}
+            title="Maximize"
+            aria-label="window maximize"
+            class="mr-2 text-base-content opacity-70 hover:opacity-100"
+          >
+          <Square class="w-4 h-4" />
+          </button>
+          
+          <button
+            on:click|preventDefault|stopPropagation={hideToTray}
+            title="Close"
+            aria-label="close window"
+            class="text-base-content opacity-70 hover:opacity-100 hover:text-red-500"
+          >
+          <X class="w-5 h-5" />
+          </button>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Add tab navigation -->
+    <div class="tab-bar px-2 bg-transparent flex w-full">
+      <div class="flex gap-2">
+        {#each tabs as tab}
+          <a 
+            href={tab.path}
+            class="tab {activeTab === tab.path ? 'active' : ''}" 
+            on:click={() => activeTab = tab.path}
+            style="--tab-color: {tab.color}; --tab-hover-color: {tab.hoverColor};"
+          >
+            <svelte:component this={tab.icon} class="w-4 h-4 mr-2" />
+            <span>{tab.name}</span>
+          </a>
+        {/each}
+      </div>
+      
+      <!-- Settings tab (placed on the right) -->
+      <div class="ml-auto">
+        <a 
+          href={settingsTab.path}
+          class="tab {activeTab === settingsTab.path ? 'active' : ''}" 
+          on:click={() => activeTab = settingsTab.path}
+          style="--tab-color: {settingsTab.color}; --tab-hover-color: {settingsTab.hoverColor};"
         >
-        <Minus class="w-5 h-5" />
-        </button>
-        
-        <button
-          on:click|preventDefault|stopPropagation={maximizeWindow}
-          title="Maximize"
-          aria-label="window maximize"
-          class="mr-2 text-base-content opacity-70 hover:opacity-100"
-        >
-        <Square class="w-4 h-4" />
-        </button>
-        
-        <button
-          on:click|preventDefault|stopPropagation={hideToTray}
-          title="To Tray"
-          aria-label="hide to tray"
-          class="text-base-content opacity-70 hover:opacity-100"
-        >
-        <X class="w-5 h-5" />
-        </button>
+          <svelte:component this={settingsTab.icon} class="w-4 h-4 mr-2" />
+          <span>{settingsTab.name}</span>
+        </a>
       </div>
     </div>
     
-    <main class="flex-1 overflow-auto p-4 bg-base-200">
+    <main class="flex-1 overflow-auto p-4" style="background-color: {activeTabBgColor}; margin-top: -1px;">
       <slot />
     </main>
   </div>
 </div>
 
 <style>
-  /* 창 드래그 가능 영역 설정 */
+  /* Set the draggable area of the window */
   .titlebar {
     height: 40px;
   }
@@ -153,5 +207,57 @@
   button, a {
     -webkit-app-region: no-drag;
     app-region: no-drag;
+  }
+
+  /* Symmetrical trapezoid tab styling */
+  .tab-bar {
+    padding-bottom: 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  .tab {
+    position: relative;
+    padding: 0.7em 1.5em;
+    color: #4b5563;
+    text-decoration: none;
+    font-weight: bold;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    transform: perspective(10px) rotateX(1deg);
+    transform-origin: bottom;
+  }
+
+  .tab::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    z-index: -1;
+    background: rgba(243, 244, 246, 0.7);
+    border: 1.5px solid #e5e7eb;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.2s ease;
+  }
+
+  .tab.active::before {
+    background-color: var(--tab-color, #eef2ff); 
+    border-color: transparent;
+    border-bottom: none;
+  }
+
+  .tab.active {
+    color: #4b5563;
+  }
+
+  .tab:not(.active):hover::before {
+    background-color: var(--tab-hover-color, #eef2ff);
+    border-color: var(--tab-hover-color, #eef2ff);
+    opacity: 0.8;
+  }
+
+  .tab:not(.active):hover {
+    color: #4b5563;
   }
 </style>

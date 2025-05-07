@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "tauri-dev": "tauri dev",
     "build:tauri": "tauri build",
-    "build:windows": "tauri build --target x86_64-pc-windows-msvc"
+    "build:windows": "tauri build --target x86_64-pc-windows-msvc",
+    "clean": "rm -rf .svelte-kit/ build/ .tauri/ && cd src-tauri && cargo clean"
   },
   "license": "MIT",
   "dependencies": {
@@ -20,6 +21,7 @@
     "@tanstack/svelte-query": "^5.74.4",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2.2.6",
+    "@tauri-apps/plugin-os": "^2.2.1",
     "clsx": "^2.1.1",
     "fe": "file:",
     "ky-universal": "^0.12.0",
@@ -32,6 +34,7 @@
     "@sveltejs/kit": "^2.20.7",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tauri-apps/cli": "^2.5.0",
+    "@types/node": "^22.15.3",
     "daisyui": "^5.0.27",
     "svelte": "^5.28.1",
     "svelte-check": "^4.1.6",

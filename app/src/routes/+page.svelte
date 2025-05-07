@@ -4,38 +4,42 @@
   import { getCards } from '../lib/data/cards';
   import MCPCard from '../lib/components/mcp-card.svelte';
   import { fetchMCPCards } from '../lib/data/mcp-api';
+  import { goto } from '$app/navigation';
   
-  // 백엔드로부터 받아올 데이터 타입 정의
+  // define data type to receive from backend
   import type { Card as CardType } from '../lib/data/cards';
   import type { MCPCard as MCPCardType } from '../lib/data/mcp-api';
-  
-  // 일반 카드 데이터
+
+  // general card data
   let cards: CardType[] = [];
   
-  // MCP 카드 데이터
+  // MCP card data
   let mcpCards: MCPCardType[] = [];
   
-  // 데이터 로딩 상태
+  // data loading state
   let loading = true;
   let mcpLoading = true;
   
-  // 선택된 카드 정보
+  // selected card info
   let selectedCard: CardType | null = null;
   
-  // 카드 선택 핸들러
+  // card selection handler
   function handleCardClick(card: CardType) {
     selectedCard = card;
   }
   
-  // 컴포넌트 마운트 시 데이터 가져오기
+  // get data when component is mounted
   onMount(async () => {
     try {
-      // 일반 카드 데이터 가져오기
+      // Automatically redirect to the Installed-MCP page
+      goto('/Installed-MCP');
+      
+      // get general card data
       loading = true;
       cards = await getCards();
       loading = false;
       
-      // MCP 카드 데이터 가져오기 (Tauri 백엔드를 통해)
+      // get MCP card data (using Tauri backend)
       mcpLoading = true;
       mcpCards = await fetchMCPCards();
       mcpLoading = false;
@@ -50,7 +54,7 @@
 <div class="p-8">
   
   <div class="flex flex-col gap-1.5">
-    <!-- 상단 정사각형 카드 3개 -->
+    <!-- top 3 square cards -->
     <div class="p-2 rounded-lg">
       {#if loading}
         <div class="flex justify-center items-center h-64">
@@ -58,23 +62,13 @@
         </div>
       {:else}
         <div class="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-3 gap-4">
-          <!-- 처음 3개의 카드만 보여줌 -->
-          {#each cards.slice(0, 3) as card (card.id)}
-            <div class="aspect-square">
-              <Card 
-                id={card.id}
-                title={card.title}
-                content={card.content}
-              />
-            </div>
-          {/each}
         </div>
       {/if}
     </div>
     
-    <!-- 하단 MCP 카드 컨테이너 -->
+    <!-- bottom MCP card container -->
     <div class="p-2 rounded-lg">
-      <p class="text-1xl font-bold">추천 MCP</p>
+      <p class="text-1xl font-bold">Recommended MCP</p>
       
       {#if mcpLoading}
         <div class="flex justify-center items-center h-64">
@@ -87,6 +81,8 @@
               id={card.id}
               title={card.title}
               description={card.description}
+              url={card.url}
+              stars={card.stars}
             />
           {/each}
         </div>

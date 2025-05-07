@@ -1,110 +1,144 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Search from '../../lib/components/search.svelte';
-  import { getCards } from '../../lib/data/cards';
-  import MCPCard from '../../lib/components/mcp-card.svelte';
-
-  // 백엔드로부터 받아올 데이터 타입 정의
-  import type { Card as CardType } from '../../lib/data/cards';
+  import { Star, Github, ArrowLeft } from 'lucide-svelte';
   
-  // 임시 데이터 (실제로는 백엔드에서 받아올 데이터)
-  let cards: CardType[] = [];
-  let filteredCards: CardType[] = [];
+  // URL에서 MCP 정보 가져오기
+  let id: number = 0;
+  let title: string = '';
+  let description: string = '';
+  let url: string = '';
+  let stars: number = 0;
   
-  // 검색어
-  let searchQuery = '';
+  // 스타 수 포맷팅 (1000 이상이면 K로 표시)
+  function formatStars(count: number): string {
+    if (count >= 1000) {
+      return `${Math.round(count / 100) / 10}k`;
+    }
+    return count.toString();
+  }
   
-  // 카테고리 필터
-  let categoryFilter = 'all'; // 'all', 'project', 'design', 'code', 'test'
-  
-  // 데이터 로딩 상태
-  let loading = true;
-  
-  // 컴포넌트 마운트 시 데이터 가져오기
-  onMount(async () => {
+  // GitHub 링크 열기 함수
+  async function openGitHub(urlToOpen: string) {
+    if (!urlToOpen) return;
+    
+    // 프로토콜이 없는 경우 https:// 추가
+    const finalUrl = urlToOpen.startsWith('http') ? urlToOpen : `https://${urlToOpen}`;
+    
     try {
-      // DB.js에서 카드 데이터 가져오기
-      loading = true;
-      cards = await getCards();
-      applyFilters(); // 초기 필터링 적용
-      loading = false;
+      // 브라우저의 기본 window.open 메서드 사용
+      window.open(finalUrl, '_blank');
     } catch (error) {
-      console.error('데이터를 가져오는 중 오류 발생:', error);
-      loading = false;
+      console.error('링크 열기 실패:', error);
+      // 실패 시 사용자에게 알림
+      alert(`링크를 열 수 없습니다. 수동으로 접속해 주세요: ${finalUrl}`);
     }
+  }
+  
+  // 뒤로가기 함수
+  function goBack() {
+    window.history.back();
+  }
+  
+  // 별점 배열 생성
+  let starsArray: number[] = [];
+  
+  onMount(() => {
+    // URL에서 파라미터 가져오기
+    const params = new URLSearchParams(window.location.search);
+    id = parseInt(params.get('id') || '0');
+    title = params.get('title') || '';
+    description = params.get('description') || '';
+    url = params.get('url') || '';
+    stars = parseInt(params.get('stars') || '0');
+    
+    // 별점 배열 생성 (최대 5개)
+    const starCount = Math.min(Math.round(stars / 1000), 5);
+    starsArray = Array(5).fill(0).map((_, i) => i < starCount ? 1 : 0);
   });
-  
-  // 필터링 적용 함수
-  function applyFilters() {
-    // 검색어 필터링
-    let results = [...cards];
-    
-    if (searchQuery.trim()) {
-      results = results.filter(card => 
-        card.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        card.content.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    
-    // 카테고리 필터링 (여기서는 제목에 특정 단어가 포함되어 있는지로 간단히 구현)
-    if (categoryFilter !== 'all') {
-      const filterTerms = {
-        'project': ['프로젝트', '계획'],
-        'design': ['디자인', '검토'],
-        'code': ['코드', '리팩토링'],
-        'test': ['테스트', '자동화']
-      };
-      
-      const terms = filterTerms[categoryFilter as keyof typeof filterTerms];
-      results = results.filter(card => 
-        terms.some(term => card.title.includes(term) || card.content.includes(term))
-      );
-    }
-    
-    filteredCards = results;
-  }
-  
-  // 검색 이벤트 핸들러
-  function handleSearchEvent(event: CustomEvent<{ value: string }>) {
-    searchQuery = event.detail.value;
-    applyFilters();
-  }
-  
 </script>
 
-<div class="p-8">
-  <div class="flex flex-col gap-6">
-    <!-- 검색 영역 -->
-
-      <h1 class="text-2xl font-bold mb-4">MCP 검색</h1>
-      
-      <div class="w-full max-w-xl rounded-[10px]">
-        <Search on:search={handleSearchEvent} />
-      </div>
-
+<div class="p-8 max-w-5xl mx-auto">
+  <div class="bg-white rounded-lg shadow-sm p-6 relative">
+    <!-- 뒤로가기 버튼 -->
+    <button 
+      class="absolute top-4 right-4 btn btn-sm btn-ghost gap-1" 
+      on:click={goBack}
+    >
+      <ArrowLeft size={18} />
+      <span>뒤로</span>
+    </button>
     
-    <!-- 카드 목록 영역 -->
-
-      <p class="text-xl font-semibold mb-2">검색 결과 ({filteredCards.length}개)</p>
+    <!-- 제목과 버전 -->
+    <div class="mb-8 border-b pb-4">
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold">{title}</h1>
+        <div class="flex items-center gap-1">
+          <Star class="text-yellow-400 fill-yellow-400" size={22} />
+          <span class="text-gray-600 font-medium">{stars > 0 ? formatStars(stars) : '0'}</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <!-- 왼쪽 컬럼: MCP 기본 정보 -->
+      <div>
+        <div class="mb-4">
+          <p class="text-gray-600 mb-1">이름: {title}</p>
+          <p class="text-gray-600 mb-3">제공자: {url ? (url.includes('github.com') ? 'GitHub' : url.split('/')[2] || 'Unknown') : 'Unknown'}</p>
+        </div>
+        
+        <div>
+          <h2 class="text-xl font-semibold mb-4">설명</h2>
+          <div class="prose max-w-none">
+            <p>{description}</p>
+          </div>
+        </div>
+      </div>
       
-      {#if loading}
-        <div class="flex justify-center items-center h-64">
-          <span class="loading loading-spinner loading-lg text-primary"></span>
+      <!-- 오른쪽 컬럼: 필수 설정 -->
+      <div>
+        <h2 class="text-xl font-semibold mb-4">필수 설정</h2>
+        <div class="mb-6">
+          <div class="form-control mb-4">
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">API 키</span>
+              </label>
+              <input type="password" class="input input-bordered" value="" placeholder="GitHub에서 발급받은 API 키를 입력하세요" />
+            </div>
+          </div>
+          
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">저장소 URL</span>
+            </label>
+            <div class="flex">
+              <input 
+                type="text" 
+                class="input input-bordered flex-1" 
+                value={url} 
+                readonly
+              />
+            </div>
+          </div>
         </div>
-      {:else if filteredCards.length === 0}
-        <div class="flex justify-center items-center h-64">
-          <p class="text-gray-500">검색 결과가 없습니다.</p>
-        </div>
-      {:else}
-        <div class="grid grid-cols-1 lg:grid-cols-1 gap-2">
-          {#each filteredCards as card (card.id)}
-            <MCPCard
-              id={card.id}
-              title={card.title}
-              description={card.description}
-            />
-          {/each}
-        </div>
-      {/if}
+      </div>
+    </div>
+    
+    <!-- 하단 버튼 영역 -->
+    <div class="mt-8 flex justify-end gap-2 border-t pt-4">
+      <button 
+        class="btn btn-sm btn-outline" 
+        on:click={goBack}
+      >
+        취소
+      </button>
+      <button 
+        class="btn btn-sm btn-primary"
+        on:click={() => alert('MCP가 설치되었습니다!')}
+      >
+        설치하기
+      </button>
+    </div>
   </div>
-</div> 
+</div>

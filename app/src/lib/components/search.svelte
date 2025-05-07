@@ -1,20 +1,20 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   
-  // 이벤트 디스패처 생성
+  // Create event dispatcher
   const dispatch = createEventDispatcher<{
     search: { value: string }
   }>();
   
-  // 검색어
+  // Search value
   let searchValue = '';
   
-  // 검색 이벤트 핸들러
+  // Search event handler
   function handleSearch() {
     dispatch('search', { value: searchValue });
   }
   
-  // 키보드 이벤트 핸들러 (Enter 키 누르면 검색)
+  // Keyboard event handler (Enter key pressed to search)
   function handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       handleSearch();
@@ -27,13 +27,11 @@
   <input 
     type="search" 
     class="grow" 
-    placeholder="MCP 이름 또는 키워드 검색..." 
+    placeholder="MCP name or keyword search..." 
     bind:value={searchValue} 
     on:input={handleSearch}
     on:keydown={handleKeyDown}
   />
-  <kbd class="kbd kbd-sm">⌘</kbd>
-  <kbd class="kbd kbd-sm">K</kbd>
 </label>
 
   

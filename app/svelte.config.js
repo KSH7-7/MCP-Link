@@ -3,6 +3,10 @@
 // See: https://v2.tauri.app/start/frontend/sveltekit/ for more info
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte"
 import adapter from "@sveltejs/adapter-static"
+import { dirname, join } from "path"
+import { fileURLToPath } from "url"
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -11,10 +15,10 @@ const config = {
 
   kit: {
     // Tauri는 정적 사이트로 생성
-    adapter: adapter({
-      // SPA 모드 빌드
-      fallback: 'index.html'
-    }),
+    adapter: adapter(),
+    alias: {
+      $app: join(__dirname, ".svelte-kit/runtime/app"),
+    },
   },
 }
 

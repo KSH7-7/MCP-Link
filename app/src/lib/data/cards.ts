@@ -74,7 +74,7 @@ export function getCards(): Promise<Card[]> {
     // API 호출 지연 시뮬레이션 (500ms)
     setTimeout(() => {
       resolve(cardData)
-    }, 500)
+    }, 50)
   })
 }
 
