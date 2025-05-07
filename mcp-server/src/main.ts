@@ -4,7 +4,7 @@ import { FallbackService } from './core/services/fallback.service';
 import { CrawlerAdapter } from './infrastructure/adapters/crawler.adapter';
 import { GuiAdapter } from './infrastructure/adapters/gui.adapter';
 import { McpAdapter } from './infrastructure/adapters/mcp.adapter';
-import { config } from './infrastructure/config';
+import { config } from './infrastructure/config/index';
 
 async function bootstrap() {
   console.log('[Main] Initializing application for Stdio transport...');
