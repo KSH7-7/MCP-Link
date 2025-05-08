@@ -12,6 +12,7 @@
 
 <div class="popup-content">
   <h1>팝업</h1>
+  <h2>팝업</h2>
 </div>
 
 <style>
