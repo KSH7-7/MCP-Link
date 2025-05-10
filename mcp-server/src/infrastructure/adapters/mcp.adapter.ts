@@ -1,19 +1,19 @@
-import { FallbackUseCase } from '../../core/ports/fallback.input.port';
-import { z } from 'zod';
+import { FallbackUseCase } from "../../core/ports/fallback.input.port.js"
+import { z } from "zod"
 import {
   type CallToolResult,
   // type RequestHandlerExtra, // Use if needed in the callback
-} from '@modelcontextprotocol/sdk/types';
+} from "@modelcontextprotocol/sdk/types.js"
 
 // Zod schema definition
 const FallbackToolInputSchema = z.object({
-  query: z.string().describe('The original user query that Claude could not process or match to any other tool.'),
-});
+  query: z.string().describe("The original user query that Claude could not process or match to any other tool."),
+})
 
 // Type inferred from the input schema
-type FallbackToolInput = z.infer<typeof FallbackToolInputSchema>;
+type FallbackToolInput = z.infer<typeof FallbackToolInputSchema>
 
-const FALLBACK_TOOL_NAME = 'fallback_handler';
+const FALLBACK_TOOL_NAME = "fallback_handler"
 const FALLBACK_TOOL_DESCRIPTION = `
 This tool MUST be used as a **fallback** for any user queries that you (Claude) cannot understand, process, or respond to.
 
@@ -29,7 +29,7 @@ This tool MUST be used as a **fallback** for any user queries that you (Claude) 
 Expected output: A confirmation message indicating the fallback process has started.
 
 **Warning:** Do NOT say anything else. Just call this tool.
-`;
+`
 
 /**
  * Provides configuration and the callback function for the fallback tool
@@ -37,9 +37,9 @@ Expected output: A confirmation message indicating the fallback process has star
  */
 export class McpAdapter {
   // Expose tool name, description, and schema as public properties for use in main.ts
-  public readonly toolName = FALLBACK_TOOL_NAME;
-  public readonly description = FALLBACK_TOOL_DESCRIPTION;
-  public readonly inputSchema = FallbackToolInputSchema;
+  public readonly toolName = FALLBACK_TOOL_NAME
+  public readonly description = FALLBACK_TOOL_DESCRIPTION
+  public readonly inputSchema = FallbackToolInputSchema
 
   constructor(private readonly fallbackService: FallbackUseCase) {}
 
@@ -55,39 +55,38 @@ export class McpAdapter {
   // Define the callback function as a class method to access this.fallbackService.
   // Use an arrow function to maintain the 'this' context when called.
   public handleCallTool = async (
-    args: FallbackToolInput,
+    args: FallbackToolInput
     // _extra: RequestHandlerExtra // Use if needed
   ): Promise<CallToolResult> => {
-    const originalQuery = args.query;
+    const originalQuery = args.query
 
-    console.log(`[MCP Adapter Callback] Executing fallback service for query: "${originalQuery}"`);
+    console.error(`[MCP Adapter Callback] Executing fallback service for query: "${originalQuery}"`)
 
     try {
       // Delegate execution to the core fallback service
-      await this.fallbackService.execute(originalQuery);
-      console.log('[MCP Adapter Callback] Fallback service execution finished successfully.');
+      await this.fallbackService.execute(originalQuery)
+      console.error("[MCP Adapter Callback] Fallback service execution finished successfully.")
 
       // Create success response (CallToolResult)
       const result: CallToolResult = {
         content: [
           {
-            type: 'text',
+            type: "text",
             text: `Fallback process initiated for your query: "${originalQuery.substring(0, 50)}..."`,
           },
         ],
         // isError: false is the default, so it's omitted
-      };
-      return result;
-
+      }
+      return result
     } catch (error) {
-      console.error('[MCP Adapter Callback] Error executing fallback service:', error);
+      console.error("[MCP Adapter Callback] Error executing fallback service:", error)
       // Error during tool execution: return CallToolResult with isError: true
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during fallback execution.';
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during fallback execution."
       const errorResult: CallToolResult = {
-        content: [{ type: 'text', text: `Error: ${errorMessage}` }],
+        content: [{ type: "text", text: `Error: ${errorMessage}` }],
         isError: true,
-      };
-      return errorResult;
+      }
+      return errorResult
     }
-  };
+  }
 }

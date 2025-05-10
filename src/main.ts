@@ -1,0 +1,7 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio"
+import { FallbackService } from "./core/services/fallback.service.js"
+import { CrawlerAdapter } from "./infrastructure/adapters/crawler.adapter.js"
+import { GuiAdapter } from "./infrastructure/adapters/gui.adapter.js"
+import { McpAdapter } from "./infrastructure/adapters/mcp.adapter.js"
+import { config } from "./infrastructure/config/index.js"

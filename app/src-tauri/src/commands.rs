@@ -12,54 +12,53 @@ use urlencoding::encode;
 
 // --- 기존 구조체 정의 (McpServerInfo, ApiCardData, PageInfo, DataWrapper, ApiResponse) ---
 #[derive(Debug, Deserialize)]
-struct McpServerInfo {
-    name: String,
-    description: String,
-    args: Option<Vec<String>>,
-    env: Option<serde_json::Map<String, Value>>,
-    command: Option<String>,
+pub struct McpServerInfo {
+    pub name: String,
+    pub description: String,
+    pub args: Option<Vec<String>>,
+    pub env: Option<serde_json::Map<String, Value>>,
+    pub command: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
-struct ApiCardData {
-    id: i32,
+pub struct ApiCardData {
+    pub id: i32,
     #[serde(rename = "type")]
-    _type: String,
-    url: String,
-    stars: i32,
-    views: i32,
-    scanned: bool,
+    pub _type: String,
+    pub url: String,
+    pub stars: i32,
+    pub views: i32,
+    pub scanned: bool,
     #[serde(rename = "mcpServer")]
-    mcpServers: McpServerInfo,
+    pub mcpServers: McpServerInfo,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
-struct PageInfo {
-    startCursor: Option<Value>,
-    endCursor: Option<Value>,
-    hasNextPage: bool,
-    totalItems: i32,
+pub struct PageInfo {
+    pub startCursor: Option<Value>,
+    pub endCursor: Option<Value>,
+    pub hasNextPage: bool,
+    pub totalItems: i32,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
-struct DataWrapper {
-    pageInfo: PageInfo,
+pub struct DataWrapper {
+    pub pageInfo: PageInfo,
     #[serde(rename = "mcpServers")]
-    mcpServers: Vec<ApiCardData>,
+    pub mcpServers: Vec<ApiCardData>,
 }
 
 // 이 ApiResponse 구조체는 get_mcp_data와 get_mcp_detail_data 모두에서 사용될 수 있습니다.
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
-struct ApiResponse {
-    // data 필드를 Value로 하여 유연하게 처리
-    timestamp: String,
-    message: String,
-    code: String,
-    data: Value, // 실제 데이터는 이 안에 Value 형태로 들어옴
+pub struct ApiResponse {
+    pub timestamp: String,
+    pub message: String,
+    pub code: String,
+    pub data: Value,
 }
 
 // --- MCPCard, MCPCardDetail, MCPServerConfig, ClaudeDesktopConfig, AppState 구조체 정의 ---
@@ -74,16 +73,16 @@ pub struct MCPCard {
 
 // DetailApiResponse is now designed to parse the object obtained from `api_response_wrapper.data.get("mcpServer")`
 #[derive(Debug, Deserialize)]
-struct DetailApiResponse {
-    id: i32,
-    url: String,
-    stars: i32,
-    #[serde(rename = "mcpServer")] // This inner mcpServer object holds the actual server details
-    mcp_server_info: McpServerInfo,
-    scanned: Option<bool>,
+pub struct DetailApiResponse {
+    pub id: i32,
+    pub url: String,
+    pub stars: i32,
+    #[serde(rename = "mcpServer")]
+    pub mcp_server_info: McpServerInfo,
+    pub scanned: Option<bool>,
     #[serde(rename = "type")]
-    _type: Option<String>,
-    views: Option<i32>,
+    pub _type: Option<String>,
+    pub views: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +112,7 @@ pub struct ClaudeDesktopConfig {
     pub other: Map<String, Value>,
 }
 
+#[derive(Clone)]
 pub struct AppState {
     pub client: Client,
 }

@@ -1,51 +1,48 @@
-import { FallbackUseCase } from "../ports/fallback.input.port";
-import { TagProvider } from "../ports/tag.provider.port";
-import { RecommendationNotifier } from "../ports/recommendation.notifier.port";
+import { FallbackUseCase } from "../ports/fallback.input.port.js"
+import { TagProvider } from "../ports/tag.provider.port.js"
+import { RecommendationNotifier } from "../ports/recommendation.notifier.port.js"
 
 /**
  * Implements the core fallback logic using provided ports.
  * Assumes dependencies (TagProvider, RecommendationNotifier adapters) are injected.
  */
 export class FallbackService implements FallbackUseCase {
-  private loadedTags: string[] = [];
-  private tagsLoaded: boolean = false;
+  private loadedTags: string[] = []
+  private tagsLoaded: boolean = false
 
-  constructor(
-    private readonly tagProvider: TagProvider,
-    private readonly recommendationNotifier: RecommendationNotifier
-  ) {}
+  constructor(private readonly tagProvider: TagProvider, private readonly recommendationNotifier: RecommendationNotifier) {}
 
   /**
    * Executes the fallback logic: load tags, extract keywords, and notify.
    * @param originalQuery The original user query.
    */
   async execute(originalQuery: string): Promise<void> {
-    console.log(`[Core Service] Executing fallback for query: "${originalQuery}"`);
+    console.error(`[Core Service] Executing fallback for query: "${originalQuery}"`)
 
     try {
-      await this.ensureTagsLoaded();
+      await this.ensureTagsLoaded()
     } catch (error) {
-      console.error("[Core Service] Failed to load tags. Aborting fallback logic.", error);
+      console.error("[Core Service] Failed to load tags. Aborting fallback logic.", error)
       // Stop execution if tags are essential for the fallback logic to proceed.
-      return;
+      return
     }
 
-    const keywords = this.extractKeywords(originalQuery, this.loadedTags);
-    console.log(`[Core Service] Extracted keywords: ${JSON.stringify(keywords)}`);
+    const keywords = this.extractKeywords(originalQuery, this.loadedTags)
+    console.error(`[Core Service] Extracted keywords: ${JSON.stringify(keywords)}`)
 
     if (keywords.length > 0) {
       try {
-        await this.recommendationNotifier.notifyKeywords(keywords);
-        console.log("[Core Service] Successfully notified recommendation system.");
+        await this.recommendationNotifier.notifyKeywords(keywords)
+        console.error("[Core Service] Successfully notified recommendation system.")
       } catch (error) {
-        console.error("[Core Service] Failed to notify recommendation system.", error);
+        console.error("[Core Service] Failed to notify recommendation system.", error)
         // Continue execution even if notification fails, as the core logic might still be useful.
       }
     } else {
-        console.log("[Core Service] No keywords found, skipping notification.");
+      console.error("[Core Service] No keywords found, skipping notification.")
     }
 
-    console.log("[Core Service] Fallback execution finished.");
+    console.error("[Core Service] Fallback execution finished.")
   }
 
   /**
@@ -54,14 +51,14 @@ export class FallbackService implements FallbackUseCase {
    */
   private async ensureTagsLoaded(): Promise<void> {
     if (!this.tagsLoaded) {
-      console.log("[Core Service] Loading tags...");
-      // Assumes the TagProvider adapter handles the API response structure
-      // and returns just the array of tag strings.
-      this.loadedTags = await this.tagProvider.getAllTags();
-      this.tagsLoaded = true;
-      console.log(`[Core Service] Loaded ${this.loadedTags.length} tags.`);
+      console.error("[Core Service] Loading tags...")
+      this.loadedTags = await this.tagProvider.getAllTags()
+      // 추가된 로그: 로드된 태그 실제 내용 출력
+      console.error("[Core Service] Actual loaded tags:", JSON.stringify(this.loadedTags, null, 2))
+      this.tagsLoaded = true
+      console.error(`[Core Service] Loaded ${this.loadedTags.length} tags.`)
     } else {
-       console.log("[Core Service] Tags already loaded.");
+      console.error("[Core Service] Tags already loaded.")
     }
   }
 
@@ -74,17 +71,19 @@ export class FallbackService implements FallbackUseCase {
    * @returns An array of found keywords (maintaining original casing from the tag list).
    */
   private extractKeywords(query: string, tags: string[]): string[] {
-    const foundKeywords: string[] = [];
-    const lowerCaseQuery = query.toLowerCase(); // Prepare query for case-insensitive check
+    // 추가된 로그: 현재 사용되는 태그 목록 출력
+    console.error("[Core Service] Tags used for extraction:", JSON.stringify(tags, null, 2))
+    const foundKeywords: string[] = []
+    const lowerCaseQuery = query.toLowerCase() // Prepare query for case-insensitive check
 
     for (const tag of tags) {
       // Check if the lowercased query includes the lowercased tag
       if (lowerCaseQuery.includes(tag.toLowerCase())) {
-        foundKeywords.push(tag); // Store the original tag casing as the keyword
+        foundKeywords.push(tag) // Store the original tag casing as the keyword
       }
     }
     // Returns all matches, including potential duplicates if a tag appears multiple times
     // or if variations of the same concept (e.g., "notion", "Notion") are matched.
-    return foundKeywords;
+    return foundKeywords
   }
 }
