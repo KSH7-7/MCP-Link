@@ -38,6 +38,7 @@ pub fn run() {
             .decorations(false) // 창 테두리 제거
             .always_on_top(true) // 항상 위에 표시
             .skip_taskbar(true) // 작업 표시줄에 표시 안 함
+            .visible(false)
             .build()?;
 
             // 메뉴 아이템 생성
@@ -111,7 +112,9 @@ pub fn run() {
         })
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
+            commands::some_command,
             commands::get_mcp_data,
+            commands::get_mcp_detail_data,
             commands::add_mcp_server_config,
             commands::remove_mcp_server_config,
             commands::restart_claude_desktop

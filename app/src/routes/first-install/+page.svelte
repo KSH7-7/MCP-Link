@@ -9,22 +9,26 @@
     command: string
     args?: string[] | null
     env?: Record<string, any> | null // Corresponds to serde_json::Map<String, Value>
+    cwd?: string | null
   }
 
   async function handleComplete() {
     errorMessage = ""
 
-    const serverNameForEntry = "test"
+    const serverNameForEntry = "McpFallbackServer"
     const configData: MCPServerConfigTypeScript = {
-      command: "npx",
-      args: ["-y", "@notionhq/notion-mcp-server"],
+      command: "node",
+      args: ["C:\\S12P31A201\\mcp-server\\dist\\main.js"],
+      cwd: "C:\\S12P31A201\\mcp-server",
       env: {
-        OPENAPI_MCP_HEADERS: '{"Authorization": "Bearer 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", "Notion-Version": "2022-06-28" }',
+        CRAWLER_API_BASE_URL: "https://mcplink.co.kr/api/v1/mcp/servers",
+        GUI_BE_API_BASE_URL: "http://localhost:8082/api/v1",
       },
     }
 
     try {
       await invoke("add_mcp_server_config", {
+        serverId: -1,
         serverName: serverNameForEntry,
         serverConfig: configData,
       })

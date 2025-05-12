@@ -72,6 +72,20 @@ pub struct MCPCard {
     pub stars: i32,
 }
 
+// 페이지 정보를 포함한 응답 구조체
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageInfoResponse {
+    pub hasNextPage: bool,
+    pub endCursor: Option<i32>,
+    pub totalItems: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MCPCardResponse {
+    pub cards: Vec<MCPCard>,
+    pub pageInfo: PageInfoResponse,
+}
+
 // DetailApiResponse is now designed to parse the object obtained from `api_response_wrapper.data.get("mcpServer")`
 #[derive(Debug, Deserialize)]
 struct DetailApiResponse {
@@ -104,6 +118,8 @@ pub struct MCPServerConfig {
     pub args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<Map<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -131,7 +147,8 @@ pub fn some_command() -> String {
 pub async fn get_mcp_data(
     state: State<'_, AppState>,
     search_term: Option<String>,
-) -> Result<Vec<MCPCard>, String> {
+    cursor_id: Option<i32>,
+) -> Result<MCPCardResponse, String> {
     dotenv().ok();
 
     let base_url: String = match env::var("CRAWLER_API_BASE_URL") {
@@ -143,16 +160,25 @@ pub async fn get_mcp_data(
         }
     };
 
+    // URL 구성에 커서 ID 추가
     let request_url = if let Some(term) = search_term {
         if term.is_empty() {
-            base_url.to_string()
+            if let Some(cursor) = cursor_id {
+                format!("{}?size=10&cursorId={}", base_url, cursor)
+            } else {
+                format!("{}?size=10", base_url)
+            }
         } else {
             let encoded_term = encode(&term);
             let search_url = format!("{}/search?name={}", base_url, encoded_term);
             search_url
         }
     } else {
-        base_url.to_string()
+        if let Some(cursor) = cursor_id {
+            format!("{}?size=10&cursorId={}", base_url, cursor)
+        } else {
+            format!("{}?size=10", base_url)
+        }
     };
 
     match state.client.get(&request_url).send().await {
@@ -196,7 +222,23 @@ pub async fn get_mcp_data(
                                                     card
                                                 );
                                             }
-                                            return Ok(cards);
+                                            
+                                            // 페이지 정보 추출
+                                            let end_cursor = match data_wrapper.pageInfo.endCursor {
+                                                Some(Value::Number(n)) => n.as_i64().map(|x| x as i32),
+                                                _ => None,
+                                            };
+                                            
+                                            let response = MCPCardResponse {
+                                                cards,
+                                                pageInfo: PageInfoResponse {
+                                                    hasNextPage: data_wrapper.pageInfo.hasNextPage,
+                                                    endCursor: end_cursor,
+                                                    totalItems: data_wrapper.pageInfo.totalItems,
+                                                },
+                                            };
+                                            
+                                            return Ok(response);
                                         }
                                         Err(e) => {
                                             // DataWrapper 파싱 실패 시 상세 로그
@@ -206,7 +248,14 @@ pub async fn get_mcp_data(
                                     }
                                 } else {
                                     println!("[get_mcp_data] API response.data is not an object or not found. Data: {:?}. Returning empty.", api_response.data);
-                                    return Ok(Vec::new());
+                                    return Ok(MCPCardResponse {
+                                        cards: Vec::new(),
+                                        pageInfo: PageInfoResponse {
+                                            hasNextPage: false,
+                                            endCursor: None,
+                                            totalItems: 0,
+                                        },
+                                    });
                                 }
                             }
                             Err(e) => {
