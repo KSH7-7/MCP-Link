@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core" // Tauri invoke API
+  import { invoke } from "@tauri-apps/api/core"; // Tauri invoke API
+  import { goto } from "$app/navigation"; // goto 함수를 임포트합니다.
 
-  let selectedDirectory = "" // Keep for potential future use, but dialog logic is disabled
-  let errorMessage = "" // For displaying errors
+  let selectedDirectory = ""; // Keep for potential future use, but dialog logic is disabled
+  let errorMessage = ""; // For displaying errors
 
-  // Interface matching the Rust MCPServerConfig struct
+  // Interface matching the Rust MCPServerConfig struct (복원)
   interface MCPServerConfigTypeScript {
     command: string
     args?: string[] | null
@@ -13,9 +14,9 @@
   }
 
   async function handleComplete() {
-    errorMessage = ""
+    errorMessage = "";
 
-    const serverNameForEntry = "McpFallbackServer"
+    const serverNameForEntry = "McpFallbackServer";
     const configData: MCPServerConfigTypeScript = {
       command: "node",
       args: ["C:\\S12P31A201\\mcp-server\\dist\\main.js"],
@@ -24,19 +25,23 @@
         CRAWLER_API_BASE_URL: "https://mcplink.co.kr/api/v1/mcp/servers",
         GUI_BE_API_BASE_URL: "http://localhost:8082/api/v1",
       },
-    }
+    };
 
     try {
       await invoke("add_mcp_server_config", {
         serverId: -1,
         serverName: serverNameForEntry,
         serverConfig: configData,
-      })
+      });
 
       // 2. Restart Claude Desktop
-      await invoke("restart_claude_desktop")
+      await invoke("restart_claude_desktop");
+
+      // 설정 완료 후 /dashboard 페이지로 이동합니다.
+      await goto('/dashboard');
+
     } catch (err) {
-      errorMessage = `error occurred: ${err}`
+      errorMessage = `error occurred: ${err}`;
     }
   }
 </script>
@@ -50,12 +55,14 @@
       <p class="text-red-500 text-sm text-center mb-4">{errorMessage}</p>
     {/if}
 
-    <button
-      on:click={handleComplete}
-      class="w-1/2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-[10px] focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
-    >
-      동의
-    </button>
+    <div class="flex justify-center">
+      <button
+        on:click={handleComplete}
+        class="w-1/2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-[10px] focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+      >
+        동의
+      </button>
+    </div>
   </div>
 </div>
 

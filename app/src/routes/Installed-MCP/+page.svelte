@@ -1,91 +1,125 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import Search from '../../lib/components/search.svelte';
-  import MCPCard from '../../lib/components/mcp-card.svelte';
-  import { fetchMCPCards } from '../../lib/data/mcp-api';
-  
-  // define data type to receive from backend
-  import type { MCPCard as MCPCardType } from '../../lib/data/mcp-api';
-  
-  // MCP card data
-  let mcpCards: MCPCardType[] = [];
-  
-  // data loading state
-  let loading = true;
-  
-  // get data when component is mounted
-  onMount(async () => {
+  import { onMount } from "svelte"
+  import { invoke } from "@tauri-apps/api/core"
+  // readTextFile is no longer needed from plugin-fs
+  import MCPCardComponent from "$lib/components/mcp-card.svelte"
+  // Assuming types are defined in mcp-api.ts or exported via an index file
+  // Let's assume they are directly in mcp-api.ts for now
+  import type { MCPCard, PageInfo } from "$lib/data/mcp-api" 
+  import { writable } from 'svelte/store'
+
+  // State variables
+  let installedServers = writable<MCPCard[]>([])
+  let pageInfo = writable<PageInfo | null>(null)
+  let isLoading = writable(true)
+  let errorMessage = writable<string | null>(null)
+
+  // Function to load installed MCP data
+  async function loadInstalledMCPs() {
+    isLoading.set(true)
+    errorMessage.set(null)
+
     try {
-      // get MCP card data from Tauri backend
-      loading = true;
-      mcpCards = await fetchMCPCards();
-      loading = false;
-    } catch (error) {
-      console.error('MCP 데이터를 가져오는 중 오류 발생:', error);
-      loading = false;
-    }
-  });
-  
-  // Search event handler
-  async function handleSearchEvent(event: CustomEvent<{ value: string }>) {
-    const searchTerm = event.detail.value;
-    console.log('검색어:', searchTerm);
-    
-    if (searchTerm) {
-      loading = true;
+      // Get the config file content directly from the backend
+      const configContent = await invoke<string>("read_mcplink_config_content")
+      console.log("[Installed-MCP] mcplink_desktop_config content from backend:", configContent)
+
+      let serverIds: number[] = []
+
       try {
-        mcpCards = await fetchMCPCards(searchTerm);
-      } catch (error) {
-        console.error('검색 중 오류 발생:', error);
-      } finally {
-        loading = false;
+        // Parse the content string
+        const configData = JSON.parse(configContent)
+        serverIds = Object.keys(configData).map(Number).filter(id => !isNaN(id))
+        console.log("[Installed-MCP] Found server IDs:", serverIds)
+      } catch (parseError: any) {
+          // Handle parsing error, e.g., if the content is not valid JSON (though Rust returns "{}" if not found)
+          console.error(`[Installed-MCP] Failed to parse config content: ${configContent}. Error:`, parseError)
+          // Depending on requirements, could treat as empty or show error
+          errorMessage.set("Failed to parse local MCP configuration.")
+          installedServers.set([])
+          isLoading.set(false)
+          return; 
       }
-    } else {
-      // 검색어가 없으면 모든 MCP 가져오기
-      loading = true;
-      try {
-        mcpCards = await fetchMCPCards();
-      } catch (error) {
-        console.error('MCP 데이터를 가져오는 중 오류 발생:', error);
-      } finally {
-        loading = false;
+
+      // If no server IDs found (empty config file or only invalid keys)
+      if (serverIds.length === 0) {
+        installedServers.set([])
+        pageInfo.set({
+          hasNextPage: false,
+          endCursor: null,
+          totalItems: 0,
+        })
+        isLoading.set(false)
+        console.log("[Installed-MCP] No installed servers found in config.")
+        return
       }
+
+      // Invoke the Rust command to get data for the installed servers
+      const response = await invoke<{ cards: MCPCard[]; pageInfo: PageInfo }>(
+        "get_installed_mcp_data",
+        { serverIds: serverIds, cursorId: null } 
+      )
+
+      console.log("[Installed-MCP] API Response:", response)
+      installedServers.set(response.cards)
+      pageInfo.set(response.pageInfo)
+
+    } catch (error: any) {
+      console.error("[Installed-MCP] Error loading installed MCPs:", error)
+      // Check if the error is the specific 'not found' signal from Rust if you implemented it
+      // if (error === "mcplink_config_not_found") { ... handle differently ... }
+      errorMessage.set(`Failed to load installed MCPs: ${error.message || error}`)
+      installedServers.set([])
+      pageInfo.set(null)
+    } finally {
+      isLoading.set(false)
     }
   }
-  
+
+  // Load data on mount
+  onMount(loadInstalledMCPs)
 </script>
 
-<div class="p-8">
-  <div class="flex flex-col gap-6">
-    <!-- card list area -->
+<div class="container mx-auto p-4">
+  <h1 class="text-2xl font-bold mb-4">Installed MCP Servers</h1>
 
-      <div class="flex justify-between items-center mb-2">
-        <p class="text-xl font-semibold">Search results ({mcpCards.length} MCPs)</p>
-        <div class="ml-auto w-72 rounded-[10px]">
-          <Search on:search={handleSearchEvent} />
-        </div>
-      </div>
-      
-      {#if loading}
-        <div class="flex justify-center items-center h-64">
-          <span class="loading loading-spinner loading-lg text-primary"></span>
-        </div>
-      {:else if mcpCards.length === 0}
-        <div class="flex justify-center items-center h-64">
-          <p class="text-gray-500">No search results found.</p>
-        </div>
-      {:else}
-        <div class="grid grid-cols-1 lg:grid-cols-1 gap-2">
-          {#each mcpCards as card (card.id)}
-            <MCPCard 
-              id={card.id}
-              title={card.title}
-              description={card.description}
-              url={card.url}
-              stars={card.stars}
-            />
-          {/each}
-        </div>
-      {/if}
-  </div>
-</div> 
+  {#if $isLoading}
+    <div class="text-center py-10">
+      <p>Loading installed servers...</p>
+      <!-- Optional: Add a spinner -->
+    </div>
+  {:else if $errorMessage}
+    <div class="text-center py-10 text-red-600">
+      <p>Error: {$errorMessage}</p>
+    </div>
+  {:else if $installedServers.length > 0}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {#each $installedServers as server (server.id)}
+        <MCPCardComponent 
+          id={server.id} 
+          title={server.title} 
+          description={server.description} 
+          url={server.url} 
+          stars={server.stars}
+          mode="installed" 
+        />
+      {/each}
+    </div>
+    {#if $pageInfo}
+      <p class="text-center mt-4 text-gray-500">Total installed servers: {$pageInfo.totalItems}</p>
+      <!-- Note: No pagination/infinite scroll implemented here as we fetch all installed servers at once -->
+    {/if}
+  {:else}
+    <div class="text-center py-10 text-gray-500">
+      <p>No MCP servers are currently installed.</p>
+      <p>Go to the 'MCP List' tab to browse and install servers.</p>
+    </div>
+  {/if}
+</div>
+
+<style>
+ /* Add any specific styles for this page if needed */
+ .container {
+   max-width: 1200px; /* Optional: Set a max width */
+ }
+</style> 

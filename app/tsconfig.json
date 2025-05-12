@@ -11,7 +11,8 @@
     "strict": true,
     "module": "es2020",
     "moduleResolution": "node",
-    "target": "es2020"
+    "target": "es2020",
+    "types": ["svelte", "@tauri-apps/api"]
   },
   "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.js", "src/**/*.svelte"],
   "exclude": ["node_modules"]

@@ -117,7 +117,9 @@ pub fn run() {
             commands::get_mcp_detail_data,
             commands::add_mcp_server_config,
             commands::remove_mcp_server_config,
-            commands::restart_claude_desktop
+            commands::restart_claude_desktop,
+            commands::get_installed_mcp_data,
+            commands::read_mcplink_config_content
         ])
         .run(tauri::generate_context!())
         .expect("error: Tauri application run failed");

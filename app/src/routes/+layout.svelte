@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css"
   import { onMount, onDestroy } from "svelte"
+  import { browser } from '$app/environment';
   import type { Window } from "@tauri-apps/api/window"
   import { Presentation, Cog, Minus, X, Square, Settings } from "lucide-svelte"
   import { page } from "$app/stores"
@@ -20,7 +21,36 @@
   // END: 추가된 변수
 
   onMount(async () => {
-    console.log("[Layout] onMount 시작")
+    // --- START: 파일 확인 및 초기 리디렉션 로직 (BaseDirectory 사용으로 복원) ---
+    if (browser) {
+      const { exists, BaseDirectory } = await import('@tauri-apps/plugin-fs'); // BaseDirectory 다시 임포트
+      const CONFIG_FILE_NAME = 'claude_desktop_config.json';
+      const FIRST_INSTALL_PATH = '/first-install';
+      const DEFAULT_PATH_AFTER_INSTALL = '/Installed-MCP';
+
+      try {
+        // BaseDirectory.AppConfig 사용 방식으로 복원
+        const configFileExists = await exists(CONFIG_FILE_NAME, { baseDir: BaseDirectory.AppConfig });
+        console.log(`[Layout OnMount Check] Config file (${CONFIG_FILE_NAME}) exists in AppConfig: ${configFileExists}`);
+
+        const currentPath = $page.url.pathname;
+
+        if (!configFileExists && currentPath !== FIRST_INSTALL_PATH) {
+          console.log(`[Layout OnMount Check] Config file not found. Redirecting to ${FIRST_INSTALL_PATH}`);
+          await goto(FIRST_INSTALL_PATH, { replaceState: true });
+          return;
+        } else if (configFileExists && currentPath === FIRST_INSTALL_PATH) {
+          console.log(`[Layout OnMount Check] Config file found. Redirecting from ${FIRST_INSTALL_PATH} to ${DEFAULT_PATH_AFTER_INSTALL}`);
+          await goto(DEFAULT_PATH_AFTER_INSTALL, { replaceState: true });
+          return;
+        }
+      } catch(e) {
+         console.error("[Layout OnMount Check] Error checking config file:", e);
+      }
+    }
+    // --- END: 파일 확인 및 초기 리디렉션 로직 ---
+
+    console.log("[Layout] onMount 시작 - Tauri 초기화 진행")
     // Check if Tauri API exists
     if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
       try {
@@ -133,7 +163,6 @@
   const tabs = [
     { path: "/Installed-MCP", name: "Installed MCP", icon: Presentation, color: "#eef2ff", hoverColor: "#eef2ff", bgColor: "#eef2ff" },
     { path: "/MCP-list", name: "MCP List", icon: Cog, color: "#ecfdf5", hoverColor: "#ecfdf5", bgColor: "#ecfdf5" },
-    { path: "/first-install", name: "First Install", icon: Cog, color: "#f0f9ff", hoverColor: "#f0f9ff", bgColor: "#f0f9ff" },
     { path: "/test", name: "Test", icon: Cog, color: "#f0f9ff", hoverColor: "#f0f9ff", bgColor: "#f0f9ff" },
   ]
 
@@ -201,7 +230,7 @@
     {/if}
 
     <!-- Add tab navigation -->
-    {#if !isPopupPage}
+    {#if !isPopupPage && !isFirstInstallPage}
       <div class="tab-bar px-2 bg-transparent flex w-full">
         <div class="flex gap-2">
           {#each tabs as tab}
