@@ -14,8 +14,8 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env'), override: false });
 // Define the schema for environment variables
 const appSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  CRAWLER_API_BASE_URL: z.string().url(),
   GUI_BE_API_BASE_URL: z.string().url(),
+  CRAWLER_API_BASE_URL: z.string().url(),
   SERVER_NAME: z.string().default('MCP Fallback Server'),
   SERVER_VERSION: z.string().default('0.1.0'),
   // Add other environment variables here
@@ -44,6 +44,17 @@ export const config = {
   // Add other config properties here
 };
 
-export type AppConfig = z.infer<typeof appSchema>;
+// Define a type for the validated environment schema
+type EnvSchemaType = z.infer<typeof appSchema>;
+
+// More accurately type the exported 'config' object
+export type AppConfig = {
+  nodeEnv: EnvSchemaType['NODE_ENV'];
+  crawlerApiBaseUrl: EnvSchemaType['CRAWLER_API_BASE_URL'];
+  guiBeApiBaseUrl: EnvSchemaType['GUI_BE_API_BASE_URL'];
+  serverName: EnvSchemaType['SERVER_NAME'];
+  serverVersion: EnvSchemaType['SERVER_VERSION'];
+  // Add other config properties here, mirroring the structure of the 'config' object
+};
 
 console.log('Configuration loaded:', config); // Optional: Log loaded config for verification

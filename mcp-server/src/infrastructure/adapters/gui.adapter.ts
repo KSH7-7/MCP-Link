@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
-import { RecommendationNotifier } from '../../core/ports/recommendation.notifier.port';
-import { config } from '../config/index';
+import { RecommendationNotifier } from '../../core/ports/recommendation.notifier.port.js';
+import { config } from '../config/index.js';
 
 /**
  * Adapts the RecommendationNotifier port to interact with the GUI Backend API.

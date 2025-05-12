@@ -1,9 +1,9 @@
-import { FallbackUseCase } from '../../core/ports/fallback.input.port';
+import { FallbackUseCase } from '../../core/ports/fallback.input.port.js';
 import { z } from 'zod';
 import {
   type CallToolResult,
   // type RequestHandlerExtra, // Use if needed in the callback
-} from '@modelcontextprotocol/sdk/types';
+} from '@modelcontextprotocol/sdk/types.js';
 
 // Zod schema definition
 const FallbackToolInputSchema = z.object({

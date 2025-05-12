@@ -1,10 +1,10 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
-import { FallbackService } from './core/services/fallback.service';
-import { CrawlerAdapter } from './infrastructure/adapters/crawler.adapter';
-import { GuiAdapter } from './infrastructure/adapters/gui.adapter';
-import { McpAdapter } from './infrastructure/adapters/mcp.adapter';
-import { config } from './infrastructure/config/index';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { FallbackService } from './core/services/fallback.service.js';
+import { CrawlerAdapter } from './infrastructure/adapters/crawler.adapter.js';
+import { GuiAdapter } from './infrastructure/adapters/gui.adapter.js';
+import { McpAdapter } from './infrastructure/adapters/mcp.adapter.js';
+import { config } from './infrastructure/config/index.js';
 
 async function bootstrap() {
   console.log('[Main] Initializing application for Stdio transport...');
@@ -27,7 +27,7 @@ async function bootstrap() {
   const mcpServer = new McpServer({
     name: config.serverName || 'FallbackMCPDevServer',
     version: config.serverVersion || '0.0.1',
-  });
+});
   console.log('[Main] MCP Server instance created.');
 
   // Register Tools with MCP Server

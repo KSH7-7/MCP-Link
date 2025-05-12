@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
-import { TagProvider } from '../../core/ports/tag.provider.port';
-import { config } from '../config/index';
+import { TagProvider } from '../../core/ports/tag.provider.port.js';
+import { config } from '../config/index.js';
 
 /**
  * Adapts the TagProvider port to interact with the Crawler Service API.

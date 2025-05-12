@@ -1,6 +1,6 @@
-import { FallbackUseCase } from "../ports/fallback.input.port";
-import { TagProvider } from "../ports/tag.provider.port";
-import { RecommendationNotifier } from "../ports/recommendation.notifier.port";
+import { FallbackUseCase } from "../ports/fallback.input.port.js";
+import { TagProvider } from "../ports/tag.provider.port.js";
+import { RecommendationNotifier } from "../ports/recommendation.notifier.port.js";
 
 /**
  * Implements the core fallback logic using provided ports.
