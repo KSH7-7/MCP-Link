@@ -1,27 +1,23 @@
 package kr.co.mcplink.domain.mcpserver.entity;
 
-import java.util.List;
-import java.util.Map;
-
+import kr.co.mcplink.global.annotation.AutoIndex;
+import kr.co.mcplink.global.annotation.AutoSequence;
+import kr.co.mcplink.global.common.Constants;
+import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
-import kr.co.mcplink.global.annotation.AutoIndex;
-import kr.co.mcplink.global.annotation.AutoSequence;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import java.util.List;
+import java.util.Map;
 
 @Getter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AutoSequence(collection = "mcp_servers")
-@AutoIndex(collection = "mcp_servers")
-@Document("mcp_servers")
+@AutoSequence(collection = Constants.COLLECTION_MCP_SERVERS)
+@AutoIndex(collection = Constants.COLLECTION_MCP_SERVERS)
+@Document(collection = Constants.COLLECTION_MCP_SERVERS)
 public class McpServer {
 
 	@Id
@@ -32,11 +28,12 @@ public class McpServer {
 	private String type = "STDIO";
 	private String url;
 	private int stars;
-	@Builder.Default
 	private int views = 0;
-	@Builder.Default
-	private boolean scanned = true;
+	private boolean official = false;
+	private boolean scanned = false;
 
+	@Builder.Default
+	private SecurityRank securityRank = SecurityRank.UNRATED;
 	private List<String> tags;
 
 	@Field("mcpServers")

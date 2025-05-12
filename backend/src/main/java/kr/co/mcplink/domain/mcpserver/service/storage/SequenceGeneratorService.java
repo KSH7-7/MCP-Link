@@ -1,4 +1,4 @@
-package kr.co.mcplink.domain.mcpserver.service.support;
+package kr.co.mcplink.domain.mcpserver.service.storage;
 
 import kr.co.mcplink.domain.mcpserver.entity.DatabaseSequence;
 import org.springframework.beans.factory.annotation.Autowired;

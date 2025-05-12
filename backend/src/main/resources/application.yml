@@ -23,3 +23,10 @@ server:
     enabled: true
   servlet:
     context-path: /api
+
+app:
+  analysis:
+    temp-dir: /app/analysis_temp
+#    temp-dir: "C:/ssafy/a201-gitlab"
+    osv-scanner-cmd: osv-scanner
+#    osv-scanner-cmd: /usr/local/bin/osv-scanner

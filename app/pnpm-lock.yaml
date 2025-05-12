@@ -38,6 +38,9 @@ importers:
       tailwindcss:
         specifier: ^4.1.4
         version: 4.1.4
+      tauri-plugin-positioner-api:
+        specifier: ^0.2.7
+        version: 0.2.7
       zod:
         specifier: ^3.24.3
         version: 3.24.3
@@ -482,6 +485,10 @@ packages:
     peerDependencies:
       svelte: ^3.54.0 || ^4.0.0 || ^5.0.0
 
+  '@tauri-apps/api@1.6.0':
+    resolution: {integrity: sha512-rqI++FWClU5I2UBp4HXFvl+sBWkdigBkxnpJDQUWttNyG7IZP4FwQGhTNL5EOw0vI8i6eSAJ5frLqO7n7jbJdg==}
+    engines: {node: '>= 14.6.0', npm: '>= 6.6.0', yarn: '>= 1.19.1'}
+
   '@tauri-apps/api@2.5.0':
     resolution: {integrity: sha512-Ldux4ip+HGAcPUmuLT8EIkk6yafl5vK0P0c0byzAKzxJh7vxelVtdPONjfgTm96PbN24yjZNESY8CKo8qniluA==}
 
@@ -847,6 +854,9 @@ packages:
     resolution: {integrity: sha512-GNzQvQTOIP6RyTfE2Qxb8ZVlNmw0n88vp1szwWRimP02mnTsx3Wtn5qRdqY9w2XduFNUgvOwhNnQsjwCp+kqaQ==}
     engines: {node: '>=6'}
 
+  tauri-plugin-positioner-api@0.2.7:
+    resolution: {integrity: sha512-jwqRHo59UU3aJbffEFkWVhBorjQg1WNeDa4W4eWVnaTqLals+/fqgHdNwTGzG1+LLdaJSS2FUy4XSwEDAWvERQ==}
+
   tinyglobby@0.2.13:
     resolution: {integrity: sha512-mEwzpUgrLySlveBwEVDMKk5B57bhLPYovRfPAXD5gA/98Opn0rCDj3GtLwFvCvH5RK9uPCExUROW5NjDwvqkxw==}
     engines: {node: '>=12.0.0'}
@@ -1201,6 +1211,8 @@ snapshots:
       '@tanstack/query-core': 5.74.4
       svelte: 5.28.1
 
+  '@tauri-apps/api@1.6.0': {}
+
   '@tauri-apps/api@2.5.0': {}
 
   '@tauri-apps/cli-darwin-arm64@2.5.0':
@@ -1348,6 +1360,7 @@ snapshots:
       ky-universal: 0.12.0(ky@1.8.1)(web-streams-polyfill@3.3.3)
       lucide-svelte: 0.503.0(svelte@5.28.1)
       tailwindcss: 4.1.4
+      tauri-plugin-positioner-api: 0.2.7
       zod: 3.24.3
     transitivePeerDependencies:
       - ky
@@ -1543,6 +1556,10 @@ snapshots:
   tailwindcss@4.1.4: {}
 
   tapable@2.2.1: {}
+
+  tauri-plugin-positioner-api@0.2.7:
+    dependencies:
+      '@tauri-apps/api': 1.6.0
 
   tinyglobby@0.2.13:
     dependencies:

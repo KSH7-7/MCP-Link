@@ -5,7 +5,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/aws-kb-retrieval-server",
     "stars": 1131,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "AWS",
       "aws"
@@ -31,7 +33,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
     "stars": 2312,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "BRAVE",
       "brave",
@@ -57,7 +61,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/everart",
     "stars": 2342,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "EVERART",
       "everart"
@@ -81,7 +87,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
     "stars": 2341,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "EVERYTHING",
       "everything"
@@ -102,7 +110,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
     "stars": 423324,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "FETCH",
       "fetch"
@@ -122,7 +132,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
     "stars": 1235412,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "FILESYSTEM",
       "filesystem",
@@ -149,7 +161,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
     "stars": 1341,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "GIT",
       "git"
@@ -171,7 +185,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
     "stars": 889832,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "GITHUB",
       "github"
@@ -195,7 +211,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab",
     "stars": 21213,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "GITLAB",
       "gitlab"
@@ -220,7 +238,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive",
     "stars": 22111,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "DRIVE",
       "drive"
@@ -241,7 +261,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/google-maps",
     "stars": 4443,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "GOOGLE",
       "google",
@@ -267,7 +289,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
     "stars": 331211,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "MEMORY",
       "memory"
@@ -288,7 +312,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
     "stars": 54353,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "POSTGRES",
       "postgres"
@@ -310,7 +336,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
     "stars": 123,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "PUPPETEER",
       "puppeteer"
@@ -331,7 +359,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/redis",
     "stars": 31313,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "REDIS",
       "redis"
@@ -353,7 +383,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sentry",
     "stars": 3131344,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "SENTRY",
       "sentry"
@@ -375,7 +407,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
     "stars": 22241,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "SEQUENTIAL",
       "sequential",
@@ -400,7 +434,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
     "stars": 8478,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "SLACK",
       "slack"
@@ -426,7 +462,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite",
     "stars": 31213,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "SQLITE",
       "sqlite"
@@ -451,7 +489,9 @@
     "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
     "stars": 12213,
     "views": 0,
+    "official": true,
     "scanned": true,
+    "securityRank": "MODERATE",
     "tags": [
       "TIME",
       "time"
@@ -462,6 +502,76 @@
       "command": "uvx",
       "args": [
         "mcp-server-time"
+      ]
+    }
+  },
+  {
+    "seq": 21,
+    "type": "STDIO",
+    "url": "https://github.com/JetBrains/mcp-jetbrains",
+    "stars": 7777,
+    "views": 0,
+    "official": false,
+    "scanned": false,
+    "securityRank": "UNRATED",
+    "tags": [
+      "jetbrains"
+    ],
+    "mcpServers": {
+      "name": "jetbrains",
+      "description": "This is Jetbrains MCP",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@jetbrains/mcp-proxy"
+      ]
+    }
+  },
+  {
+    "seq": 22,
+    "type": "STDIO",
+    "url": "https://github.com/mongodb-js/mongodb-mcp-server",
+    "stars": 7777,
+    "views": 0,
+    "official": false,
+    "scanned": false,
+    "securityRank": "UNRATED",
+    "tags": [
+      "mongodb"
+    ],
+    "mcpServers": {
+      "name": "MongoDB",
+      "description": "This is MongoDB MCP",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mongodb-mcp-server",
+        "--connectionString",
+        "mongodb+srv://username:password@cluster.mongodb.net/myDatabase"
+      ]
+    }
+  },
+  {
+    "seq": 23,
+    "type": "STDIO",
+    "url": "https://github.com/Azure/azure-mcp",
+    "stars": 7777,
+    "views": 0,
+    "official": false,
+    "scanned": false,
+    "securityRank": "UNRATED",
+    "tags": [
+      "azure"
+    ],
+    "mcpServers": {
+      "name": "Azure MCP Server",
+      "description": "This is Azure MCP",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@azure/mcp@latest",
+        "server",
+        "start"
       ]
     }
   }

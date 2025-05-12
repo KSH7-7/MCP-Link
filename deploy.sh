@@ -29,4 +29,5 @@ echo "New Container Running... ${IMAGE_TO_DEPLOY}"
 docker compose up -d --no-deps --force-recreate backend --wait
 
 echo "Docker Image prune"
+docker images resd/backend --format "{{.Repository}}:{{.Tag}}" | sort -r | tail -n +6 | xargs -r docker rmi
 docker image prune -f || true

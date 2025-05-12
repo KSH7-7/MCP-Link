@@ -10,9 +10,6 @@ import java.util.stream.Collectors;
 @Repository
 public interface McpTagRepository extends MongoRepository<McpTag, String> {
 
-    @Override
-    McpTag save(McpTag tag);
-
     default List<String> listAll() {
         return findAll().stream()
                 .map(McpTag::getTag)

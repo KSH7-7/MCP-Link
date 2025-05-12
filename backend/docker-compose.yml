@@ -9,19 +9,18 @@ services:
     ports:
       - 8081:8080
 
-#    volumes:
-#      - /var/run/docker.sock:/var/run/docker.sock
-#      - /usr/bin/docker:/usr/bin/docker
-#      - /home/ubuntu/jenkins-data:/var/jenkins_home
-#      - /home/ubuntu/link:/home/ubuntu/link
-
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
       DB_HOST: mongodb
       DB_PORT: 27017
-      DB_NAME: ${MONGO_INITDB_DATABASE:-mydatabase} # MongoDB 초기 DB 이름 변수와 일치
-      DB_USER: ${MONGO_APP_USER} # 애플리케이션이 사용할 MongoDB 사용자 이름 변수
-      DB_PASSWORD: ${MONGO_APP_PASSWORD} # 애플리케이션이 사용할 MongoDB 비밀번호 변수
+      DB_NAME: ${MONGO_INITDB_DATABASE:-mydatabase}
+      DB_USER: ${MONGO_APP_USER}
+      DB_PASSWORD: ${MONGO_APP_PASSWORD}
+      APP_ANALYSIS_TEMP_DIR: /app/analysis_temp
+      APP_ANALYSIS_OSV_SCANNER_CMD: /usr/local/bin/osv-scanner
+
+    volumes:
+      - analysis_data:/app/analysis_temp # 추가
 
     networks:
       - mcplink-network
@@ -35,12 +34,11 @@ services:
       - 0.0.0.0:27017:27017
 
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME} # .env 가져올 변수명
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD} # .env 가져올 변수명
-      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-mydatabase} # .env 가져오거나 기본값 사용
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-mydatabase}
 
     volumes:
-      # 'mongodb_data'라는 이름의 볼륨을 컨테이너 내부 MongoDB 데이터 디렉토리에 마운트
       - mongodb_data:/data/db
 
     networks:
@@ -53,3 +51,4 @@ networks:
 
 volumes:
   mongodb_data:
+  analysis_data:

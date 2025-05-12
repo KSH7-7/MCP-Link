@@ -1,132 +1,357 @@
+// app/src-tauri/src/commands.rs
+
+use dotenvy::dotenv;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use std::process::Command as StdCommand;
-use tauri::{Manager, State};
-use urlencoding;
+use std::{env, fs, path::PathBuf, process::Command as StdCommand};
+use tauri::{AppHandle, Manager, State};
+use tokio::time::{sleep, Duration};
+use urlencoding::encode;
 
-/// MCP 카드 데이터
+// --- 기존 구조체 정의 (McpServerInfo, ApiCardData, PageInfo, DataWrapper, ApiResponse) ---
+#[derive(Debug, Deserialize)]
+struct McpServerInfo {
+    name: String,
+    description: String,
+    args: Option<Vec<String>>,
+    env: Option<serde_json::Map<String, Value>>,
+    command: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+struct ApiCardData {
+    id: i32,
+    #[serde(rename = "type")]
+    _type: String,
+    url: String,
+    stars: i32,
+    views: i32,
+    scanned: bool,
+    #[serde(rename = "mcpServer")]
+    mcpServers: McpServerInfo,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+struct PageInfo {
+    startCursor: Option<Value>,
+    endCursor: Option<Value>,
+    hasNextPage: bool,
+    totalItems: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+struct DataWrapper {
+    pageInfo: PageInfo,
+    #[serde(rename = "mcpServers")]
+    mcpServers: Vec<ApiCardData>,
+}
+
+// 이 ApiResponse 구조체는 get_mcp_data와 get_mcp_detail_data 모두에서 사용될 수 있습니다.
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+struct ApiResponse {
+    // data 필드를 Value로 하여 유연하게 처리
+    timestamp: String,
+    message: String,
+    code: String,
+    data: Value, // 실제 데이터는 이 안에 Value 형태로 들어옴
+}
+
+// --- MCPCard, MCPCardDetail, MCPServerConfig, ClaudeDesktopConfig, AppState 구조체 정의 ---
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MCPCard {
     pub id: i32,
     pub title: String,
     pub description: String,
-    pub url: String, // GitHub 리포지토리 URL
-    pub stars: i32,  // GitHub 스타 수
+    pub url: String,
+    pub stars: i32,
 }
 
-/// MCP 서버 설정
+// DetailApiResponse is now designed to parse the object obtained from `api_response_wrapper.data.get("mcpServer")`
+#[derive(Debug, Deserialize)]
+struct DetailApiResponse {
+    id: i32,
+    url: String,
+    stars: i32,
+    #[serde(rename = "mcpServer")] // This inner mcpServer object holds the actual server details
+    mcp_server_info: McpServerInfo,
+    scanned: Option<bool>,
+    #[serde(rename = "type")]
+    _type: Option<String>,
+    views: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MCPCardDetail {
+    pub id: i32,
+    pub title: String,
+    pub description: String,
+    pub url: String,
+    pub stars: i32,
+    pub args: Option<Vec<String>>,
+    pub env: Option<Map<String, Value>>,
+    pub command: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MCPServerConfig {
     pub command: String,
     pub args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub env: Option<serde_json::Map<String, serde_json::Value>>,
+    pub env: Option<Map<String, Value>>,
 }
 
-/// 클로드 데스크톱 설정
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClaudeDesktopConfig {
     pub mcpServers: Option<HashMap<String, MCPServerConfig>>,
     #[serde(flatten)]
-    pub other: serde_json::Map<String, serde_json::Value>,
+    pub other: Map<String, Value>,
 }
 
-/// 앱 상태 관리를 위함함
 pub struct AppState {
     pub client: Client,
 }
 
-/// MCP 카드 데이터를 가져와 (검색어 필터링 포함)
+// --- Tauri Commands ---
+
+#[tauri::command]
+pub fn some_command() -> String {
+    let _ = dotenv().ok();
+    let crawler_api_base_url: String =
+        env::var("CRAWLER_API_BASE_URL").expect("CRAWLER_API_BASE_URL must be set");
+    return crawler_api_base_url;
+}
+
 #[tauri::command]
 pub async fn get_mcp_data(
     state: State<'_, AppState>,
     search_term: Option<String>,
 ) -> Result<Vec<MCPCard>, String> {
-    let new_base_url = "http://localhost:8081/api"; // new local server address (8081 port)
-    let url = if let Some(term) = &search_term {
-        let encoded_term = urlencoding::encode(term);
-        format!("{}?search={}", new_base_url, encoded_term)
-    } else {
-        new_base_url.to_string()
+    dotenv().ok();
+
+    let base_url: String = match env::var("CRAWLER_API_BASE_URL") {
+        Ok(url_val) => url_val,
+        Err(e) => {
+            let msg = format!("[get_mcp_data] CRAWLER_API_BASE_URL not set: {}", e);
+            println!("{}", msg);
+            return Err(msg);
+        }
     };
 
-    // API 요청 보내기
-    match state.client.get(url).send().await {
+    let request_url = if let Some(term) = search_term {
+        if term.is_empty() {
+            base_url.to_string()
+        } else {
+            let encoded_term = encode(&term);
+            let search_url = format!("{}/search?name={}", base_url, encoded_term);
+            search_url
+        }
+    } else {
+        base_url.to_string()
+    };
+
+    match state.client.get(&request_url).send().await {
         Ok(response) => {
-            if response.status().is_success() {
-                // 일단 Value로 파싱 (유연한 처리를 위해)
-                match response.json::<Value>().await {
-                    Ok(json_value) => {
-                        // API 응답이 배열인지 확인
-                        if let Some(array) = json_value.as_array() {
-                            // 각 항목을 MCPCard로 변환
-                            let mut cards = Vec::new();
+            let status = response.status();
 
-                            for item in array {
-                                if let Some(obj) = item.as_object() {
-                                    // 필수 필드
-                                    let id =
-                                        obj.get("id").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-                                    let title = obj
-                                        .get("title")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("Unknown")
-                                        .to_string();
-                                    let description = obj
-                                        .get("description")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string();
-
-                                    // 옵션 필드 (없으면 기본값 사용)
-                                    let url = obj
-                                        .get("url")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    let stars =
-                                        obj.get("stars").and_then(|v| v.as_i64()).unwrap_or(0)
-                                            as i32;
-
-                                    cards.push(MCPCard {
-                                        id,
-                                        title,
-                                        description,
-                                        url,
-                                        stars,
-                                    });
+            if status.is_success() {
+                match response.text().await {
+                    Ok(text_body) => {
+                        println!("[get_mcp_data] RAW API Response Body: {}", text_body);
+                        match serde_json::from_str::<ApiResponse>(&text_body) {
+                            Ok(api_response) => {
+                                if let Value::Object(data_obj) = &api_response.data {
+                                    // DataWrapper 파싱 전 로그 추가
+                                    println!("[get_mcp_data] Attempting to parse data_obj into DataWrapper: {:?}", data_obj);
+                                    match serde_json::from_value::<DataWrapper>(Value::Object(
+                                        data_obj.clone(),
+                                    )) {
+                                        Ok(data_wrapper) => {
+                                            let cards: Vec<MCPCard> = data_wrapper
+                                                .mcpServers
+                                                .iter()
+                                                .map(|api_card| MCPCard {
+                                                    id: api_card.id,
+                                                    title: api_card.mcpServers.name.clone(),
+                                                    description: api_card
+                                                        .mcpServers
+                                                        .description
+                                                        .clone(),
+                                                    url: api_card.url.clone(),
+                                                    stars: api_card.stars,
+                                                })
+                                                .collect();
+                                            println!(
+                                                "[get_mcp_data] Successfully parsed {} cards.",
+                                                cards.len()
+                                            );
+                                            if let Some(card) = cards.first() {
+                                                println!(
+                                                    "[get_mcp_data] First parsed card: {:?}",
+                                                    card
+                                                );
+                                            }
+                                            return Ok(cards);
+                                        }
+                                        Err(e) => {
+                                            // DataWrapper 파싱 실패 시 상세 로그
+                                            println!("[get_mcp_data] Failed to parse data object into DataWrapper: {}. Data object was: {:?}", e, data_obj);
+                                            return Err(format!("[get_mcp_data] Failed to parse data into DataWrapper: {}", e));
+                                        }
+                                    }
+                                } else {
+                                    println!("[get_mcp_data] API response.data is not an object or not found. Data: {:?}. Returning empty.", api_response.data);
+                                    return Ok(Vec::new());
                                 }
                             }
-
-                            Ok(cards)
-                        } else {
-                            Err("API 응답이 배열 형식이 아닙니다".to_string())
+                            Err(e) => {
+                                let msg = format!("[get_mcp_data] JSON parsing error for ApiResponse: {}. Body: {:.500}", e, text_body);
+                                println!("{}", msg);
+                                return Err(msg);
+                            }
                         }
                     }
-                    Err(e) => Err(format!("JSON parsing error: {}", e)),
+                    Err(e) => {
+                        let msg = format!("[get_mcp_data] Failed to read response text: {}", e);
+                        println!("{}", msg);
+                        return Err(msg);
+                    }
                 }
             } else {
-                Err(format!("server error: {}", response.status()))
+                let error_body = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
+                let msg = format!(
+                    "[get_mcp_data] Server error for {}: {}. Body: {:.500}",
+                    request_url, status, error_body
+                );
+                println!("{}", msg);
+                return Err(msg);
             }
         }
-        Err(e) => Err(format!("request error: {}", e)),
+        Err(e) => {
+            let msg = format!("[get_mcp_data] Request error for {}: {}", request_url, e);
+            println!("{}", msg);
+            return Err(msg);
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn get_mcp_detail_data(
+    state: State<'_, AppState>,
+    id: i32,
+) -> Result<MCPCardDetail, String> {
+    dotenv().ok();
+    let base_url: String = match env::var("CRAWLER_API_BASE_URL") {
+        Ok(url_val) => url_val,
+        Err(e) => {
+            let msg = format!("[get_mcp_detail_data] CRAWLER_API_BASE_URL not set: {}", e);
+            return Err(msg);
+        }
+    };
+    let request_url = format!("{}/{}", base_url, id);
+    println!(
+        "[get_mcp_detail_data] Requesting detail for ID {}: {}",
+        id, request_url
+    );
+
+    match state.client.get(&request_url).send().await {
+        Ok(response) => {
+            let status = response.status();
+            println!(
+                "[get_mcp_detail_data] Response status for {}: {}",
+                request_url, status
+            );
+            if status.is_success() {
+                match response.json::<ApiResponse>().await {
+                    // Outer ApiResponse wrapper
+                    Ok(api_response_wrapper) => {
+                        println!("[get_mcp_detail_data] Successfully parsed outer ApiResponse. Data field: {:?}", api_response_wrapper.data);
+
+                        // Check if api_response_wrapper.data is an Object and get the inner "mcpServer" value
+                        if let Value::Object(data_map) = api_response_wrapper.data {
+                            if let Some(inner_mcp_server_value) = data_map.get("mcpServer") {
+                                println!("[get_mcp_detail_data] Extracted inner_mcp_server_value (target for DetailApiResponse): {:?}", inner_mcp_server_value);
+
+                                // Now parse this inner_mcp_server_value into DetailApiResponse
+                                match serde_json::from_value::<DetailApiResponse>(
+                                    inner_mcp_server_value.clone(),
+                                ) {
+                                    Ok(detail_data) => {
+                                        let card_detail = MCPCardDetail {
+                                            id: detail_data.id,
+                                            title: detail_data.mcp_server_info.name, // Name from McpServerInfo
+                                            description: detail_data.mcp_server_info.description, // Description from McpServerInfo
+                                            url: detail_data.url,
+                                            stars: detail_data.stars,
+                                            args: detail_data.mcp_server_info.args,
+                                            env: detail_data.mcp_server_info.env,
+                                            command: detail_data.mcp_server_info.command,
+                                        };
+                                        println!("[get_mcp_detail_data] Successfully parsed inner data to MCPCardDetail: {:?}", card_detail);
+                                        Ok(card_detail)
+                                    }
+                                    Err(e_inner_struct) => {
+                                        let msg = format!("[get_mcp_detail_data] Failed to parse inner_mcp_server_value into DetailApiResponse: {}. Value was: {:?}", e_inner_struct, inner_mcp_server_value);
+                                        println!("{}", msg);
+                                        Err(msg)
+                                    }
+                                }
+                            } else {
+                                let msg = format!("[get_mcp_detail_data] Key 'mcpServer' not found inside ApiResponse.data. ApiResponse.data was: {:?}", data_map);
+                                println!("{}", msg);
+                                Err(msg)
+                            }
+                        } else {
+                            let msg = format!("[get_mcp_detail_data] ApiResponse.data is not an object. It was: {:?}", api_response_wrapper.data);
+                            println!("{}", msg);
+                            Err(msg)
+                        }
+                    }
+                    Err(e_outer) => {
+                        let msg = format!("[get_mcp_detail_data] Failed to parse outer ApiResponse: {}. Check if the overall response matches ApiResponse structure.", e_outer);
+                        println!("{}", msg);
+                        Err(msg)
+                    }
+                }
+            } else {
+                let error_body = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
+                let msg = format!(
+                    "[get_mcp_detail_data] Server error {}: {}. Body: {:.500}",
+                    request_url, status, error_body
+                );
+                println!("{}", msg);
+                Err(msg)
+            }
+        }
+        Err(e) => {
+            let msg = format!("[get_mcp_detail_data] Request error {}: {}", request_url, e);
+            println!("{}", msg);
+            Err(msg)
+        }
     }
 }
 
 /// MCP 서버 설정을 Claude Desktop 설정 파일에 추가
 #[tauri::command]
 pub async fn add_mcp_server_config(
-    app: tauri::AppHandle,
+    app: AppHandle,
     server_name: String,
     server_config: MCPServerConfig,
+    server_id: i64,
 ) -> Result<(), String> {
     // 설정 파일 경로를 생성합니다.
-    let config_path = match std::env::consts::OS {
+    let config_path = match env::consts::OS {
         "windows" => {
             // Windows의 경우 %APPDATA%\Claude\claude_desktop_config.json
             let appdata = app
@@ -148,6 +373,12 @@ pub async fn add_mcp_server_config(
         }
     };
 
+    // mcplink 파일 경로 생성 (claude_desktop_config.json과 같은 위치)
+    let mcplink_path = config_path
+        .parent()
+        .unwrap()
+        .join("mcplink_desktop_config.json");
+
     // 설정 파일 읽기 (파일이 없으면 빈 객체 생성)
     let mut config = if config_path.exists() {
         let config_str = fs::read_to_string(&config_path)
@@ -157,9 +388,9 @@ pub async fn add_mcp_server_config(
             Ok(config) => config,
             Err(_) => {
                 // 파일이 있지만 형식이 잘못된 경우, 다른 필드는 유지하면서 새로 생성
-                match serde_json::from_str::<serde_json::Value>(&config_str) {
+                match serde_json::from_str::<Value>(&config_str) {
                     Ok(value) => {
-                        if let serde_json::Value::Object(map) = value {
+                        if let Value::Object(map) = value {
                             ClaudeDesktopConfig {
                                 mcpServers: None,
                                 other: map,
@@ -180,7 +411,7 @@ pub async fn add_mcp_server_config(
     let mut servers = config.mcpServers.unwrap_or_default();
 
     // 서버 설정 추가 또는 업데이트
-    servers.insert(server_name, server_config);
+    servers.insert(server_name.clone(), server_config);
     config.mcpServers = Some(servers);
 
     // 설정 파일에 쓰기
@@ -190,144 +421,202 @@ pub async fn add_mcp_server_config(
     fs::write(&config_path, config_json)
         .map_err(|e| format!("Failed to write config file: {}", e))?;
 
+    // mcplink_desktop_config.json 파일에 server_id와 server_name 추가
+    let mut mcplink_config = if mcplink_path.exists() {
+        let mcplink_str = fs::read_to_string(&mcplink_path)
+            .map_err(|e| format!("Failed to read mcplink config file: {}", e))?;
+
+        match serde_json::from_str::<Map<String, Value>>(&mcplink_str) {
+            Ok(map) => map,
+            Err(_) => Map::new(),
+        }
+    } else {
+        Map::new()
+    };
+
+    // server_id를 문자열 키로 변환하고 server_name을 값으로 저장
+    mcplink_config.insert(server_id.to_string(), Value::String(server_name));
+
+    // mcplink 설정 파일에 쓰기
+    let mcplink_json = serde_json::to_string_pretty(&mcplink_config)
+        .map_err(|e| format!("Failed to serialize mcplink config: {}", e))?;
+
+    fs::write(&mcplink_path, mcplink_json)
+        .map_err(|e| format!("Failed to write mcplink config file: {}", e))?;
+
+    Ok(())
+}
+
+/// MCP 서버 설정을 Claude Desktop 설정 파일에서 삭제
+#[tauri::command]
+pub async fn remove_mcp_server_config(app: AppHandle, server_name: String) -> Result<(), String> {
+    // 설정 파일 경로를 생성합니다.
+    let config_path = match env::consts::OS {
+        "windows" => {
+            let appdata = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| format!("Failed to get AppData directory: {}", e))?;
+            let claude_dir = appdata.parent().unwrap().join("Claude");
+            if !claude_dir.exists() {
+                return Err("Claude directory does not exist".to_string());
+            }
+            claude_dir.join("claude_desktop_config.json")
+        }
+        _ => {
+            return Err("This function is currently only supported on Windows".to_string());
+        }
+    };
+
+    // mcplink 파일 경로 생성 (claude_desktop_config.json과 같은 위치)
+    let mcplink_path = config_path
+        .parent()
+        .unwrap()
+        .join("mcplink_desktop_config.json");
+
+    // 설정 파일이 존재하는지 확인
+    if !config_path.exists() {
+        return Err("Configuration file does not exist".to_string());
+    }
+
+    let config_str = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
+
+    let mut config = match serde_json::from_str::<ClaudeDesktopConfig>(&config_str) {
+        Ok(config) => config,
+        Err(e) => return Err(format!("Failed to parse config file: {}", e)),
+    };
+
+    if config.mcpServers.is_none() {
+        return Err("No MCP servers are installed".to_string());
+    }
+
+    let mut servers = config.mcpServers.unwrap_or_default();
+
+    if !servers.contains_key(&server_name) {
+        return Err(format!("MCP server '{}' not found", server_name));
+    }
+
+    servers.remove(&server_name);
+    config.mcpServers = Some(servers);
+
+    let config_json = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    fs::write(&config_path, config_json)
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+
+    // mcplink_desktop_config.json 파일에서 server_name과 관련된 항목 제거
+    if mcplink_path.exists() {
+        let mcplink_str = fs::read_to_string(&mcplink_path)
+            .map_err(|e| format!("Failed to read mcplink config file: {}", e))?;
+
+        match serde_json::from_str::<Map<String, Value>>(&mcplink_str) {
+            Ok(mut mcplink_config) => {
+                // server_name과 일치하는 모든 항목을 찾아 삭제
+                let mut keys_to_remove = Vec::new();
+                for (key, value) in &mcplink_config {
+                    if let Value::String(name) = value {
+                        if name == &server_name {
+                            keys_to_remove.push(key.clone());
+                        }
+                    }
+                }
+
+                // 찾은 키들을 삭제
+                for key in keys_to_remove {
+                    mcplink_config.remove(&key);
+                }
+
+                // 업데이트된 설정을 파일에 쓰기
+                let mcplink_json = serde_json::to_string_pretty(&mcplink_config)
+                    .map_err(|e| format!("Failed to serialize mcplink config: {}", e))?;
+
+                fs::write(&mcplink_path, mcplink_json)
+                    .map_err(|e| format!("Failed to write mcplink config file: {}", e))?;
+            }
+            Err(e) => return Err(format!("Failed to parse mcplink config file: {}", e)),
+        }
+    }
+
     Ok(())
 }
 
 /// Claude Desktop 애플리케이션을 재시작
 #[tauri::command]
-pub async fn restart_claude_desktop(_app: tauri::AppHandle) -> Result<(), String> {
-    // Windows에서 Claude Desktop 프로세스를 종료하는 다양한 방법 시도
-    println!("Claude Desktop 프로세스를 종료합니다...");
+pub async fn restart_claude_desktop(_app: AppHandle) -> Result<(), String> {
+    println!("Attempting to restart Claude Desktop...");
 
-    // 가능한 Electron Claude 관련 프로세스 이름들
-    let possible_process_names = [
-        "claude.exe", // 소문자 버전
-    ];
-
-    let mut found_process = false;
-
-    // 각 가능한 프로세스 이름에 대해 검색 및 종료 시도
-    for process_name in possible_process_names.iter() {
-        // 프로세스 확인
-        let check_process = StdCommand::new("tasklist")
-            .args([
-                "/FI",
-                &format!("IMAGENAME eq {}", process_name),
-                "/FO",
-                "CSV",
-            ])
-            .output()
-            .map_err(|e| format!("tasklist 실행 실패: {}", e))?;
-
-        let output = String::from_utf8_lossy(&check_process.stdout);
-
-        if output.contains(process_name) {
-            println!(
-                "{} 프로세스가 실행 중입니다. 종료를 시도합니다.",
-                process_name
-            );
-            found_process = true;
-
-            // PID 기반 종료 시도
-            if let Some(pid_list) = extract_pids_from_tasklist(&output) {
-                for pid in pid_list {
-                    println!("PID {}를 강제 종료합니다.", pid);
-                    let _ = StdCommand::new("taskkill")
-                        .args(["/F", "/PID", &pid])
-                        .output();
-                }
-            }
-        }
+    // 1) claude.exe 프로세스 모두 종료 (정확한 필터 사용)
+    let kill_status = StdCommand::new("taskkill")
+        .args([
+            "/F", // 강제 종료
+            "/T", // 자식 프로세스까지 종료
+            "/FI",
+            "IMAGENAME eq claude.exe",
+        ])
+        .status()
+        .map_err(|e| format!("Failed to execute taskkill: {}", e))?;
+    match kill_status.code() {
+        Some(0) => println!("✅ All existing Claude processes terminated."),
+        Some(128) => println!("✅ No Claude processes to terminate (exit code 128)."),
+        Some(c) => println!("⚠️ taskkill abnormal exit code: {}", c),
+        None => println!("⚠️ taskkill terminated by signal."),
     }
 
-    // 프로세스를 찾지 못했을 경우에도 정보 출력
-    if !found_process {
-        println!("실행 중인 Claude Desktop 프로세스를 찾을 수 없습니다.");
-        // 가장 일반적인 Electron 프로세스들을 확인하고 'Claude'라는 문자열이 있는지 검사
-        let check_all_processes = StdCommand::new("tasklist")
-            .args(["/FO", "CSV"])
-            .output()
-            .map_err(|e| format!("tasklist 실행 실패: {}", e))?;
+    // 2) 충분히 대기 (2초)
+    sleep(Duration::from_millis(2000)).await;
 
-        let all_processes = String::from_utf8_lossy(&check_all_processes.stdout);
-
-        // 'Claude'라는 이름이 포함된 모든 프로세스를 찾기
-        for line in all_processes.lines() {
-            if line.to_lowercase().contains("claude") {
-                let parts: Vec<&str> = line.split(',').collect();
-                if parts.len() >= 2 {
-                    let process_name = parts[0].trim_matches('"');
-                    println!("Claude 관련 프로세스 발견: {}", process_name);
-
-                    // 해당 프로세스 종료 시도
-                    let _ = StdCommand::new("taskkill")
-                        .args(["/F", "/IM", process_name])
-                        .output();
-                }
-            }
-        }
-    }
-
-    // 작은 지연 추가 (프로세스가 완전히 종료될 시간을 줌)
-    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-
-    // 가능한 Claude Desktop 설치 경로들
-    let local_appdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
-    let appdata = std::env::var("APPDATA").unwrap_or_default();
-
-    let possible_paths = [
-        // 사용자가 지정한 위치
-        format!("{}\\AnthropicClaude\\Claude.exe", local_appdata),
-    ];
-
-    // 가능한 모든 경로 출력 (디버깅 용도)
-    for path in &possible_paths {
-        println!(
-            "확인 중인 경로: {}, 존재함: {}",
-            path,
-            Path::new(path).exists()
-        );
-    }
-
-    // 존재하는 Claude.exe 파일 찾기
-    let claude_path = possible_paths
-        .iter()
-        .find(|path| Path::new(path).exists())
-        .ok_or_else(|| {
-            "Claude Desktop 실행 파일을 찾을 수 없습니다. 설치 경로를 확인해주세요.".to_string()
-        })?;
-
-    // 백그라운드에서 Claude Desktop 시작
-    match StdCommand::new(claude_path).spawn() {
-        Ok(_) => {
-            println!(
-                "Claude Desktop을 성공적으로 재시작했습니다. 경로: {}",
-                claude_path
-            );
-            Ok(())
-        }
-        Err(e) => Err(format!("Failed to start Claude Desktop: {}", e)),
-    }
-}
-
-/// 주어진 tasklist 출력에서 PID 목록을 추출합니다.
-fn extract_pids_from_tasklist(tasklist_output: &str) -> Option<Vec<String>> {
-    let mut pids = Vec::new();
-
-    // CSV 형식의 출력 파싱 (헤더 건너뛰기)
-    for line in tasklist_output.lines().skip(1) {
-        // CSV 형식에서 두 번째 값이 PID
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 2 {
-            // 따옴표 제거
-            let pid = parts[1].trim_matches('"').to_string();
-            pids.push(pid);
-        }
-    }
-
-    if pids.is_empty() {
-        None
+    // 3) 종료 확인
+    let check = StdCommand::new("tasklist")
+        .args(["/FI", "IMAGENAME eq claude.exe", "/NH"])
+        .output()
+        .map_err(|e| format!("Failed to execute tasklist: {}", e))?;
+    let running = String::from_utf8_lossy(&check.stdout);
+    if running.trim().is_empty() {
+        println!("✅ Confirmed all claude.exe processes are terminated.");
     } else {
-        Some(pids)
+        println!("⚠️ Still running processes:\n{}", running);
     }
+
+    // 4) 캐시 디렉터리 미리 생성 (권한 문제 방지)
+    let cache_dir: PathBuf = {
+        let base =
+            env::var("LOCALAPPDATA").map_err(|e| format!("Failed to get LOCALAPPDATA: {}", e))?;
+        let dir = PathBuf::from(&base).join("AnthropicClaude").join("Cache");
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create cache dir {:?}: {}", dir, e))?;
+        dir
+    };
+    let cache_dir_str = cache_dir.to_string_lossy();
+
+    // 5) 실행 파일 경로 준비
+    let claude_exe: PathBuf = {
+        let base =
+            env::var("LOCALAPPDATA").map_err(|e| format!("Failed to get LOCALAPPDATA: {}", e))?;
+        PathBuf::from(base)
+            .join("AnthropicClaude")
+            .join("Claude.exe")
+    };
+    println!("Attempting to start Claude from: {}", claude_exe.display());
+    if !claude_exe.exists() {
+        return Err(format!("Claude.exe not found at {}", claude_exe.display()));
+    }
+
+    // 6) Electron 런타임 플래그만 전달 → URL 파싱 에러 방지
+    let child = StdCommand::new(&claude_exe)
+        .args([
+            "--user-data-dir",
+            &cache_dir_str,
+            "--disable-gpu-shader-disk-cache",
+            "--disable-gpu",
+        ])
+        .spawn()
+        .map_err(|e| format!("Failed to start Claude Desktop: {}", e))?;
+    println!(
+        "✅ Claude Desktop restarted successfully (PID {}).",
+        child.id()
+    );
+
+    Ok(())
 }

@@ -23,28 +23,36 @@
   // 컴포넌트 마운트 시 데이터 가져오기
   onMount(async () => {
     try {
-      // Tauri 백엔드를 통해 MCP 카드 데이터 가져오기
-      loading = true;
-      mcpCards = await fetchMCPCards();
-      applyFilters(); // 초기 필터링 적용
-      loading = false;
+      // 초기 데이터 로드 (검색어 없이)
+      await searchFromServer('');
     } catch (error) {
       console.error('MCP 데이터를 가져오는 중 오류 발생:', error);
       loading = false;
     }
   });
   
+  // 서버 검색 요청 함수
+  async function searchFromServer(query: string) {
+    try {
+      loading = true;
+      console.log(`서버에 검색 요청: "${query}"`);
+      
+      // 서버에 검색 요청 (빈 문자열이어도 그대로 전달)
+      mcpCards = await fetchMCPCards(query);
+      
+      // 추가 필터링 적용 (카테고리 등)
+      applyFilters();
+      loading = false;
+    } catch (error) {
+      console.error('검색 중 오류 발생:', error);
+      loading = false;
+    }
+  }
+  
   // 필터링 적용 함수
   function applyFilters() {
-    // 검색어 필터링
+    // 로컬 필터링 (카테고리 등)
     let results = [...mcpCards];
-    
-    if (searchQuery.trim()) {
-      results = results.filter(card => 
-        card.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        card.description.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
     
     // 카테고리 필터링 (여기서는 제목에 특정 단어가 포함되어 있는지로 간단히 구현)
     if (categoryFilter !== 'all') {
@@ -68,9 +76,9 @@
   }
   
   // 검색 이벤트 핸들러
-  function handleSearchEvent(event: CustomEvent<{ value: string }>) {
+  async function handleSearchEvent(event: CustomEvent<{ value: string }>) {
     searchQuery = event.detail.value;
-    applyFilters();
+    await searchFromServer(searchQuery);
   }
   
 </script>

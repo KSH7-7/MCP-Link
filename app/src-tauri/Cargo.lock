@@ -880,12 +880,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dotenv"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
-
-[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1586,7 +1580,7 @@ dependencies = [
 name = "gui"
 version = "0.0.0"
 dependencies = [
- "dotenv",
+ "dotenvy",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
@@ -1596,6 +1590,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "tauri-plugin-os",
+ "tauri-plugin-positioner",
  "tauri-plugin-process",
  "tauri-plugin-shell",
  "tokio",
@@ -4648,6 +4643,21 @@ dependencies = [
  "serde_json",
  "serialize-to-javascript",
  "sys-locale",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "tauri-plugin-positioner"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c95b371d489bee3d1be5e5bd1538080ad408317fcc2d8546d24b290249f7bb5"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "serde_repr",
  "tauri",
  "tauri-plugin",
  "thiserror 2.0.12",

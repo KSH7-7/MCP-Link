@@ -1,20 +1,19 @@
 package kr.co.mcplink.domain.mcpserver.dto;
 
-import lombok.AllArgsConstructor;
+import kr.co.mcplink.domain.mcpserver.entity.SecurityRank;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
 
-@Getter
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class McpDetailDataDto {
-    private long id;
-    private String type;
-    private String url;
-    private int stars;
-    private int views;
-    private boolean scanned;
-    private McpDetailDto mcpServers;
+public record McpDetailDataDto (
+    long id,
+    String type,
+    String url,
+    int stars,
+    int views,
+    boolean official,
+    boolean scanned,
+    SecurityRank securityRank,
+    McpServerDetailDto mcpServer
+) {
+
 }

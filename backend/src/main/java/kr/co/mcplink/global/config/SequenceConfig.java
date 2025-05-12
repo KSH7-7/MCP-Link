@@ -1,6 +1,6 @@
 package kr.co.mcplink.global.config;
 
-import kr.co.mcplink.domain.mcpserver.service.support.SequenceGeneratorService;
+import kr.co.mcplink.domain.mcpserver.service.storage.SequenceGeneratorService;
 import kr.co.mcplink.global.annotation.AutoSequence;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;

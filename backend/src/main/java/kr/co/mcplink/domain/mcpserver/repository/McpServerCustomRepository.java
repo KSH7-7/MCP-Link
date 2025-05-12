@@ -7,11 +7,8 @@ import java.util.List;
 
 public interface McpServerCustomRepository {
 
-    long countAll();
     long countRemaining(Long cursor);
-    List<McpServer> listAll(int limit, Long cursor);
-    long countByName(String name);
+    List<McpServer> listAll(int size, Long cursor);
     long countRemainingByName(String name, Long cursor);
-    List<McpServer> searchByName(String name, int limit, Long cursor);
-    void incrementViews(Long seq);
+    List<McpServer> searchByName(String name, int size, Long cursor);
 }

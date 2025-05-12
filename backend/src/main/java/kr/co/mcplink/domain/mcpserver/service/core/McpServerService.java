@@ -1,90 +1,101 @@
 package kr.co.mcplink.domain.mcpserver.service.core;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.stream.Collectors;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-
-import kr.co.mcplink.domain.mcpserver.dto.McpDetailDataDto;
-import kr.co.mcplink.domain.mcpserver.dto.McpDetailDto;
-import kr.co.mcplink.domain.mcpserver.dto.McpSummaryDataDto;
-import kr.co.mcplink.domain.mcpserver.dto.McpSummaryDto;
-import kr.co.mcplink.domain.mcpserver.dto.PageInfoDto;
-import kr.co.mcplink.domain.mcpserver.dto.request.McpServerSearchRequest;
-import kr.co.mcplink.domain.mcpserver.dto.response.McpListResponse;
-import kr.co.mcplink.domain.mcpserver.dto.response.McpSearchByNameResponse;
+import kr.co.mcplink.domain.mcpserver.dto.*;
+import kr.co.mcplink.domain.mcpserver.dto.response.*;
 import kr.co.mcplink.domain.mcpserver.entity.McpServer;
 import kr.co.mcplink.domain.mcpserver.repository.McpServerRepository;
 import kr.co.mcplink.domain.mcpserver.repository.McpTagRepository;
-import kr.co.mcplink.domain.mcpserver.service.support.ViewCountUpdaterService;
 import kr.co.mcplink.global.common.ApiResponse;
 import kr.co.mcplink.global.common.Constants;
 import kr.co.mcplink.global.util.PaginationUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class McpServerService {
 	private final McpServerRepository serverRepository;
 	private final McpTagRepository tagRepository;
-	private final ViewCountUpdaterService viewCountUpdaterService;
-	private final McpServerRepository mcpServerRepository;
 
-	public ApiResponse<McpListResponse> getLists(Integer size, Long cursorId) {
-		List<McpServer> items = serverRepository.listAll(size, cursorId);
+	public ApiResponse<McpListResponse> findAllServers(Integer size, Long cursorId) {
+		List<McpServer> servers = serverRepository.listAll(size, cursorId);
+
 		long total = serverRepository.countAll();
-		long endCursor = items.isEmpty() ? 0L : items.get(items.size() - 1).getSeq();
+		long endCursor = servers.isEmpty() ? 0L : servers.get(servers.size() - 1).getSeq();
 		long remaining = serverRepository.countRemaining(endCursor);
 
-		PageInfoDto pageInfo = PaginationUtil.buildPageInfo(items, total, remaining);
-		List<McpSummaryDataDto> data = items.stream()
+		PageInfoDto pageInfo = PaginationUtil.buildPageInfo(servers, total, remaining);
+
+		List<McpSummaryDataDto> mcpServers = servers.stream()
 			.map(this::toSummaryDataDto)
 			.collect(Collectors.toList());
 
-		McpListResponse response = new McpListResponse(pageInfo, data);
+		McpListResponse response = new McpListResponse(pageInfo, mcpServers);
 
-		return ApiResponse.success(HttpStatus.OK.toString(), "전체 목록", List.of(response));
+		return ApiResponse.success(HttpStatus.OK.toString(), Constants.MSG_SUCCESS_LIST, response);
 	}
 
-	public ApiResponse<McpSearchByNameResponse> searchByName(McpServerSearchRequest request) {
-		// 디폴트 값 설정
-		int size = request.size().orElse(5);
-		long cursorId = request.cursorId().orElse(0L);
+	public ApiResponse<McpSearchResponse> searchServersByName(String name, Integer size, Long cursorId) {
+		List<McpServer> servers = serverRepository.searchByName(name, size, cursorId);
 
-		List<McpServer> items = serverRepository.searchByName(request.mcpServerName(), size, cursorId);
+		long total = serverRepository.countByName(name);
+		long endCursor = servers.isEmpty() ? 0L : servers.get(servers.size() - 1).getSeq();
+		long remaining = serverRepository.countRemainingByName(name, endCursor);
 
-		long total = serverRepository.countByName(request.mcpServerName());
-		long endCursor = items.isEmpty() ? 0L : items.get(items.size() - 1).getSeq();
-		long remaining = serverRepository.countRemainingByName(request.mcpServerName(), endCursor);
+		PageInfoDto pageInfo = PaginationUtil.buildPageInfo(servers, total, remaining);
 
-		PageInfoDto pageInfo = PaginationUtil.buildPageInfo(items, total, remaining);
-
-		List<McpSummaryDataDto> data = items.stream()
+		List<McpSummaryDataDto> mcpServers = servers.stream()
 		        .map(this::toSummaryDataDto)
 		        .collect(Collectors.toList());
 
-		McpSearchByNameResponse response = new McpSearchByNameResponse(pageInfo, data);
+		McpSearchResponse response = new McpSearchResponse(pageInfo, mcpServers);
 
-		return ApiResponse.success(HttpStatus.OK.toString(), "이름 검색결과", List.of(response));
+		return ApiResponse.success(HttpStatus.OK.toString(), Constants.MSG_SUCCESS_SEARCH, response);
 	}
 
-	public ApiResponse<McpDetailDataDto> getDetail(Long seq) {
+	public ApiResponse<McpBatchResponse> findServersByIds(List<Long> serverIds, Integer size, Long cursorId) {
+		List<Long> pageIds = PaginationUtil.slicePageIdsForBatch(serverIds, size, cursorId);
+		List<McpServer> servers = serverRepository.findBySeqInOrder(pageIds);
+
+		PageInfoDto pageInfo = PaginationUtil.buildPageInfoForBatch(serverIds, size, cursorId);
+
+		List<McpSummaryDataDto> mcpServers = servers.stream()
+				.map(this::toSummaryDataDto)
+				.collect(Collectors.toList());
+
+		McpBatchResponse response = new McpBatchResponse(pageInfo, mcpServers);
+
+		return ApiResponse.success(HttpStatus.OK.toString(), Constants.MSG_SUCCESS_BATCH, response);
+	}
+
+	public ApiResponse<McpDetailResponse> findServerById(Long seq) {
 		McpServer server = serverRepository.findBySeq(seq).orElse(null);
 
 		if(server == null) {
 			return ApiResponse.error(HttpStatus.NOT_FOUND.toString(), Constants.MSG_NOT_FOUND);
 		}
 
-		mcpServerRepository.incrementViews(seq);
-		McpDetailDataDto data = toDetailDataDto(server);
+		long updated = serverRepository.findAndIncrementViewsBySeq(seq);
+		if (updated != 1) {
+			// Exception 추가 예정
+		}
 
-		return ApiResponse.success(HttpStatus.OK.toString(), "상세 정보", List.of(data));
+		McpDetailDataDto mcpServer = toDetailDataDto(server);
+		McpDetailResponse response = new McpDetailResponse(mcpServer);
+
+		return ApiResponse.success(HttpStatus.OK.toString(), Constants.MSG_SUCCESS_DETAIL, response);
 	}
 
-	public ApiResponse<String> listTags() {
-		return ApiResponse.success(HttpStatus.OK.toString(), "태그 목록", tagRepository.listAll());
+	public ApiResponse<McpTagResponse> findAllTags() {
+		List<String> tags = tagRepository.listAll();
+
+		McpTagResponse response = new McpTagResponse(tags);
+
+		return ApiResponse.success(HttpStatus.OK.toString(), Constants.MSG_SUCCESS_TAG_LIST, response);
 	}
 
 	private McpSummaryDataDto toSummaryDataDto(McpServer s) {
@@ -94,9 +105,11 @@ public class McpServerService {
 			.url(s.getUrl())
 			.stars(s.getStars())
 			.views(s.getViews())
+			.official(s.isOfficial())
 			.scanned(s.isScanned())
-			.mcpServers(
-				McpSummaryDto.builder()
+			.securityRank(s.getSecurityRank())
+			.mcpServer(
+				McpServerSummaryDto.builder()
 					.name(s.getDetail().getName())
 					.description(s.getDetail().getDescription())
 					.build()
@@ -111,9 +124,11 @@ public class McpServerService {
 			.url(s.getUrl())
 			.stars(s.getStars())
 			.views(s.getViews())
+			.official(s.isOfficial())
 			.scanned(s.isScanned())
-			.mcpServers(
-				McpDetailDto.builder()
+			.securityRank(s.getSecurityRank())
+			.mcpServer(
+				McpServerDetailDto.builder()
 					.name(s.getDetail().getName())
 					.description(s.getDetail().getDescription())
 					.command(s.getDetail().getCommand())

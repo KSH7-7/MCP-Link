@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -24,8 +25,9 @@ public class ErrorResponse {
 	public static ResponseEntity<ErrorResponse> toResponseEntity(HttpStatus httpStatus, String message, String path) {
 		return ResponseEntity
 			.status(httpStatus)
+			.contentType(MediaType.APPLICATION_JSON)
 			.body(ErrorResponse.builder()
-				.timestamp(Instant.from(LocalDateTime.now()))
+				.timestamp(Instant.now())
 				.status(httpStatus.value())
 				.error(httpStatus.name())
 				.message(message)

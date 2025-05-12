@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import type { Window } from '@tauri-apps/api/window';
   import { Presentation, Cog, Minus, X, Square, Settings } from 'lucide-svelte';
+  import { page } from '$app/stores';
   
   // Tauri window object to save
   let tauriWindow: Window | null = null;
@@ -78,6 +79,7 @@
   const tabs = [
     { path: "/Installed-MCP", name: "Installed MCP", icon: Presentation, color: "#eef2ff", hoverColor: "#eef2ff", bgColor: "#eef2ff" },
     { path: "/MCP-list", name: "MCP List", icon: Cog, color: "#ecfdf5", hoverColor: "#ecfdf5", bgColor: "#ecfdf5" },
+    { path: "/first-install", name: "First Install", icon: Cog, color: "#f0f9ff", hoverColor: "#f0f9ff", bgColor: "#f0f9ff" },
   ];
   
   // Settings tab (placed on the right)
@@ -87,11 +89,18 @@
   $: activeTabBgColor = settingsTab.path === activeTab 
     ? settingsTab.bgColor 
     : tabs.find(tab => tab.path === activeTab)?.bgColor || "#f8fafc";
+
+  // Determine if the current page is the first-install page
+  $: isFirstInstallPage = $page.url.pathname === '/first-install';
+
+  // Determine if the current page is the popup page
+  $: isPopupPage = $page.url.pathname === '/popup';
 </script>
 
 <div class="flex flex-col h-screen overflow-hidden">
   <div class="flex flex-col overflow-hidden">
     <!-- Top bar - draggable and transparent background -->
+    {#if !isPopupPage}
     <div class="bg-transparent p-2 flex justify-between border-b border-transparent titlebar">
       <div class="flex-1 drag-region"></div>
       
@@ -154,8 +163,10 @@
         </div>
       {/if}
     </div>
+    {/if}
 
     <!-- Add tab navigation -->
+    {#if !isPopupPage}
     <div class="tab-bar px-2 bg-transparent flex w-full">
       <div class="flex gap-2">
         {#each tabs as tab}
@@ -184,8 +195,9 @@
         </a>
       </div>
     </div>
+    {/if}
     
-    <main class="flex-1 overflow-auto p-4" style="background-color: {activeTabBgColor}; margin-top: -1px;">
+    <main class="flex-1 overflow-auto p-4" style="{!isPopupPage ? ('background-color:' + activeTabBgColor + '; margin-top: -1px;') : ''}">
       <slot />
     </main>
   </div>
