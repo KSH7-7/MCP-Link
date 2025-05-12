@@ -17,7 +17,7 @@ export class GuiAdapter implements RecommendationNotifier {
     async notifyKeywords(keywords: string[]): Promise<void> {
         try {
             await this.http.post('/recommendations', { keywords });
-            console.log(`Keywords notification sent: ${keywords.join(', ')}`);
+            // console.log(`Keywords notification sent: ${keywords.join(', ')}`);
         } catch (error) {
             console.error('Error sending keywords notification to GUI backend:', error);
             // Depending on error handling strategy, you might throw a custom error.

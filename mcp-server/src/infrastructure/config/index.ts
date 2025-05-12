@@ -57,4 +57,4 @@ export type AppConfig = {
   // Add other config properties here, mirroring the structure of the 'config' object
 };
 
-console.log('Configuration loaded:', config); // Optional: Log loaded config for verification
+// console.log('Configuration loaded:', config); // Optional: Log loaded config for verification

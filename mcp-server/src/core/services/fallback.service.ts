@@ -20,7 +20,7 @@ export class FallbackService implements FallbackUseCase {
    * @param originalQuery The original user query.
    */
   async execute(originalQuery: string): Promise<void> {
-    console.log(`[Core Service] Executing fallback for query: "${originalQuery}"`);
+    // console.log(`[Core Service] Executing fallback for query: "${originalQuery}"`);
 
     try {
       await this.ensureTagsLoaded();
@@ -31,21 +31,21 @@ export class FallbackService implements FallbackUseCase {
     }
 
     const keywords = this.extractKeywords(originalQuery, this.loadedTags);
-    console.log(`[Core Service] Extracted keywords: ${JSON.stringify(keywords)}`);
+    // console.log(`[Core Service] Extracted keywords: ${JSON.stringify(keywords)}`);
 
     if (keywords.length > 0) {
       try {
         await this.recommendationNotifier.notifyKeywords(keywords);
-        console.log("[Core Service] Successfully notified recommendation system.");
+        // console.log("[Core Service] Successfully notified recommendation system.");
       } catch (error) {
         console.error("[Core Service] Failed to notify recommendation system.", error);
         // Continue execution even if notification fails, as the core logic might still be useful.
       }
     } else {
-        console.log("[Core Service] No keywords found, skipping notification.");
+        // console.log("[Core Service] No keywords found, skipping notification.");
     }
 
-    console.log("[Core Service] Fallback execution finished.");
+    // console.log("[Core Service] Fallback execution finished.");
   }
 
   /**
@@ -54,14 +54,14 @@ export class FallbackService implements FallbackUseCase {
    */
   private async ensureTagsLoaded(): Promise<void> {
     if (!this.tagsLoaded) {
-      console.log("[Core Service] Loading tags...");
+      // console.log("[Core Service] Loading tags...");
       // Assumes the TagProvider adapter handles the API response structure
       // and returns just the array of tag strings.
       this.loadedTags = await this.tagProvider.getAllTags();
       this.tagsLoaded = true;
-      console.log(`[Core Service] Loaded ${this.loadedTags.length} tags.`);
+      // console.log(`[Core Service] Loaded ${this.loadedTags.length} tags.`);
     } else {
-       console.log("[Core Service] Tags already loaded.");
+      //  console.log("[Core Service] Tags already loaded.");
     }
   }
 

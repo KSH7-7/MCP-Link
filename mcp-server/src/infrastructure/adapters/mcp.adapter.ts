@@ -60,12 +60,12 @@ export class McpAdapter {
   ): Promise<CallToolResult> => {
     const originalQuery = args.query;
 
-    console.log(`[MCP Adapter Callback] Executing fallback service for query: "${originalQuery}"`);
+    // console.log(`[MCP Adapter Callback] Executing fallback service for query: "${originalQuery}"`);
 
     try {
       // Delegate execution to the core fallback service
       await this.fallbackService.execute(originalQuery);
-      console.log('[MCP Adapter Callback] Fallback service execution finished successfully.');
+      // console.log('[MCP Adapter Callback] Fallback service execution finished successfully.');
 
       // Create success response (CallToolResult)
       const result: CallToolResult = {
