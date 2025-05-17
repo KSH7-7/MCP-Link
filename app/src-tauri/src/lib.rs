@@ -16,7 +16,7 @@ use dotenvy::dotenv;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Manager, async_runtime,
 };
 use tauri_plugin_notification::{NotificationExt, PermissionState};
 use tokio::sync::Mutex;
@@ -90,21 +90,33 @@ async fn handle_recommendations(
             }
         }
         
-        // Utilize existing notification logic
-        let notification_body = format!("Selected keywords: {}. Click to check.", keywords_str);
+        // Use modal notifications instead of system notifications
+        if let Some(first_keyword) = payload.keywords.first() {
+            // Start async task to show modal notification
+            let app_handle_clone = app_handle.clone();
+            let first_keyword_clone = first_keyword.clone();
+            
+            async_runtime::spawn(async move {
+                if let Err(e) = commands::show_modal_notification(app_handle_clone, first_keyword_clone).await {
+                    eprintln!("[Recommendation] Failed to show modal notification: {}", e);
+                }
+            });
+        } else {
+            // Fallback to system notification if no keywords
+            let notification_body = format!("Selected keywords: {}. Click to check.", keywords_str);
 
-        let builder = app_handle
-            .notification()
-            .builder()
-            .title("New Recommended Keywords") // Title in English
-            .body(&notification_body)
-            .icon("icons/icon.png");
+            let builder = app_handle
+                .notification()
+                .builder()
+                .title("New Recommended Keywords") // Title in English
+                .body(&notification_body)
+                .icon("icons/icon.png");
 
-        match builder.show() {
-            Ok(_) => {
-            }
-            Err(e) => {
-                eprintln!("[Recommendation] Failed to send notification: {}", e);
+            match builder.show() {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("[Recommendation] Failed to send notification: {}", e);
+                }
             }
         }
 
@@ -319,35 +331,21 @@ pub fn run() {
             }
 
             // Notification handler function
-            fn handle_notification(body: &str, app_handle: &tauri::AppHandle) {
+            fn handle_notification(body: &str, app_handle: tauri::AppHandle) {
                 // Get main window
                 if let Some(window) = app_handle.get_webview_window("main") {
-                    // 1. Activate window (process in the same order)
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-
-                    // 2. Bring window to front
-                    let _ = window.set_always_on_top(true);
-                    let _ = window.set_focus(); // Redundant if already focused, but ensures focus
-                    let _ = window.set_always_on_top(false);
-
-                    // 3. Tag extraction logic
+                    // Extract tag from notification body
                     let final_tag = extract_tag_from_body(body).unwrap_or_else(|| {
                         // Default tag if extraction fails
                         "GOOGLE".to_string()
                     });
 
-                    // 4. Emit events
-                    // Navigate to MCP-list page
-                    let target_url = format!("/MCP-list?keyword={}", final_tag);
-                    // Emit event - navigate to page using navigate-to (use emit instead of emit_all)
-                    // Explicitly use Emitter trait
-                    {
-                        use tauri::Emitter;
-                        let _ = window.emit("navigate-to", target_url.clone());
-                        let _ = window.emit("navigate-to-mcp-list-with-keyword", target_url);
-                    }
+                    // Use our new modal notification approach instead of system notifications
+                    // This is handled by the show_modal_notification command
+                    let app_handle_clone = app_handle.clone();
+                    let _ = async_runtime::spawn(async move {
+                        let _ = commands::show_modal_notification(app_handle_clone, final_tag).await;
+                    });
                 }
             }
             // --- End of notification click handler modification ---
@@ -376,6 +374,8 @@ pub fn run() {
         .manage(app_state) // Manage AppState with Tauri
         .invoke_handler(tauri::generate_handler![
             commands::show_popup,
+            commands::show_modal_notification,
+            commands::activate_main_window_with_keyword,
             commands::get_mcp_data,
             commands::get_mcp_detail_data,
             commands::add_mcp_server_config,

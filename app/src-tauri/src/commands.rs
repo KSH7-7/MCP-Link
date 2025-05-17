@@ -7,7 +7,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
 use std::{env, fs, path::PathBuf, process::Command as StdCommand}; // env added for accessing environment variables at runtime
-use tauri::{AppHandle, Manager, State, Emitter};
+use tauri::{AppHandle, Manager, State, Emitter, WebviewWindowBuilder, WebviewUrl};
 use tauri_plugin_notification::NotificationExt;
 use tokio::time::{sleep, Duration};
 use urlencoding::encode;
@@ -972,6 +972,73 @@ pub fn read_mcplink_config_content(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn show_popup(app: AppHandle, tag: String) -> Result<(), String> {
+    // Choose between notification modal window and system notification
+    let use_modal_window = true; // Change this to false to use system notifications instead
+    
+    if use_modal_window {
+        // Use modal window approach
+        show_modal_notification(app, tag).await
+    } else {
+        // Use system notification approach (original implementation)
+        show_system_notification(app, tag).await
+    }
+}
+
+/// Shows a modal window notification for keyword suggestions
+#[tauri::command]
+pub async fn show_modal_notification(app: AppHandle, tag: String) -> Result<(), String> {
+    // Clear any existing pending keyword first
+    if let Err(e) = clear_pending_notification_keyword() {
+        eprintln!("[Modal] Failed to clear previous keywords: {}", e);
+    }
+
+    // Set the pending keyword in the backend state
+    if let Err(e) = set_pending_notification_keyword(tag.clone()) {
+        eprintln!("[Modal] Failed to set pending keyword: {}", e);
+        return Err(format!("Failed to set pending keyword: {}", e));
+    }
+
+    // URL-encode the keyword for passing as a URL parameter
+    let encoded_keyword = urlencoding::encode(&tag);
+    
+    // Create a new modal window for the notification
+    let modal_window = tauri::WebviewWindowBuilder::new(
+        &app,
+        "notification-modal", // window label
+        tauri::WebviewUrl::App(format!("/modal-notification?keyword={}", encoded_keyword).into()),
+    )
+    .title("키워드 추천")
+    .center()
+    .decorations(false)
+    .always_on_top(true)
+    .focused(true)
+    .inner_size(400.0, 250.0)
+    .resizable(false)
+    .skip_taskbar(true) // Don't show in taskbar
+    .visible(true);
+    
+    // Create the window
+    match modal_window.build() {
+        Ok(window) => {
+            println!("[Modal] Successfully created notification modal window");
+            
+            // Set focus to ensure it's visible to the user
+            if let Err(e) = window.set_focus() {
+                eprintln!("[Modal] Failed to set focus to modal window: {}", e);
+            }
+        },
+        Err(e) => {
+            eprintln!("[Modal] Failed to create notification window: {}", e);
+            return Err(format!("Failed to create notification window: {}", e));
+        }
+    }
+
+    Ok(())
+}
+
+/// Shows a system notification for keyword suggestions (original implementation)
+#[tauri::command]
+pub async fn show_system_notification(app: AppHandle, tag: String) -> Result<(), String> {
     // Clear any existing pending keyword first
     if let Err(e) = clear_pending_notification_keyword() {
         eprintln!("[Notification] Failed to clear previous keywords: {}", e);
@@ -984,7 +1051,6 @@ pub async fn show_popup(app: AppHandle, tag: String) -> Result<(), String> {
     }
 
     // Create notification body with the tag information
-
     let notification_body = format!("Selected keyword: {}. Click to confirm.", tag);
 
     // Create and display notification
@@ -1073,6 +1139,62 @@ pub async fn show_popup(app: AppHandle, tag: String) -> Result<(), String> {
         }
     });
 
+    Ok(())
+}
+
+/// Activates the main window and navigates to MCP list with a keyword
+#[tauri::command]
+pub async fn activate_main_window_with_keyword(app: AppHandle, keyword: String) -> Result<(), String> {
+    // Get the main window
+    let main_window = app.get_webview_window("main").ok_or("Main window not found")?;
+    
+    // 1. Show the window if it's hidden
+    if !main_window.is_visible().unwrap_or(false) {
+        if let Err(e) = main_window.show() {
+            eprintln!("[Activation] Failed to show main window: {}", e);
+        }
+    }
+    
+    // 2. Unminimize if minimized
+    if main_window.is_minimized().unwrap_or(false) {
+        if let Err(e) = main_window.unminimize() {
+            eprintln!("[Activation] Failed to unminimize main window: {}", e);
+        }
+    }
+    
+    // 3. Set always on top and focus
+    if let Err(e) = main_window.set_always_on_top(true) {
+        eprintln!("[Activation] Failed to set main window always on top: {}", e);
+    }
+    
+    if let Err(e) = main_window.set_focus() {
+        eprintln!("[Activation] Failed to set focus to main window: {}", e);
+    }
+    
+    // 4. Navigate to MCP list with keyword
+    // Format the URL to navigate to
+    let navigate_url = format!("/MCP-list?keyword={}", urlencoding::encode(&keyword));
+    
+    // Emit an event to the frontend to navigate to the MCP list with the keyword
+    if let Err(e) = main_window.emit("navigate-to-mcp-list-with-keyword", navigate_url) {
+        eprintln!("[Activation] Failed to emit navigation event: {}", e);
+        return Err(format!("Failed to navigate to MCP list: {}", e));
+    }
+    
+    // 5. Schedule removal of always-on-top after a delay
+    let main_window_clone = main_window.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        if let Err(e) = main_window_clone.set_always_on_top(false) {
+            eprintln!("[Activation] Failed to remove always-on-top: {}", e);
+        }
+    });
+    
+    // 6. Update notification state to mark the keyword as processed
+    if let Err(e) = clear_pending_notification_keyword() {
+        eprintln!("[Activation] Failed to clear notification keyword: {}", e);
+    }
+    
     Ok(())
 }
 

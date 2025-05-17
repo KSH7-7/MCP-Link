@@ -19,7 +19,8 @@
         "decorations": false,
         "transparent": false,
         "minWidth": 750,
-        "minHeight": 550
+        "minHeight": 550,
+        "label": "main"
       }
     ],
     "security": {
