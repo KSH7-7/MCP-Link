@@ -6,6 +6,7 @@
   import { page } from "$app/stores"
   import { listen } from "@tauri-apps/api/event"
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
+  import NotificationHandler from "./NotificationHandler.svelte"
 
   // define data type to receive from backend
   import type { MCPCard as MCPCardType, PageInfo } from "../../lib/data/mcp-api"
@@ -83,6 +84,147 @@
 
   // get data when component is mounted
   onMount(() => {
+    // 세션 스토리지에서 알림 키워드 확인 (일회성 처리)
+    const pendingKeyword = sessionStorage.getItem('pendingSearchKeyword')
+    if (pendingKeyword) {
+      console.log('Found pending keyword in session storage:', pendingKeyword)
+      searchTermFromQuery = pendingKeyword
+      isRecommendedSearch = true
+      
+      // 페이지 로드 시 자동 검색 실행
+      setTimeout(() => {
+        searchAndDisplay(pendingKeyword)
+      }, 300)
+      
+      // 사용한 키워드는 세션 스토리지에서 제거
+      sessionStorage.removeItem('pendingSearchKeyword')
+      
+      // 마지막 알림 키워드도 제거 (페이지 새로고침에서 재사용 방지)
+      localStorage.removeItem('lastNotificationKeyword')
+    } else {
+      // URL 파라미터에서 키워드를 확인
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlKeyword = urlParams.get('keyword');
+      
+      // URL에 키워드가 있으면 마지막 키워드 검사는 건너뜀
+      if (urlKeyword) {
+        console.log('Found keyword in URL parameters:', urlKeyword);
+        // 마지막 알림 키워드가 URL에 있는 키워드와 같으면 제거
+        if (localStorage.getItem('lastNotificationKeyword') === urlKeyword) {
+          localStorage.removeItem('lastNotificationKeyword');
+        }
+        return;
+      }
+      
+      // 로컬 스토리지에서 마지막 알림 키워드 확인 (백업 처리)
+      const lastKeyword = localStorage.getItem('lastNotificationKeyword')
+      if (lastKeyword && !pendingKeyword && !searchTermFromQuery) {
+        console.log('Using last notification keyword as fallback:', lastKeyword)
+        searchTermFromQuery = lastKeyword
+        isRecommendedSearch = true
+        
+        // 페이지 로드 시 자동 검색 실행
+        setTimeout(() => {
+          searchAndDisplay(lastKeyword)
+          // 사용 후 키워드 제거 (재사용 방지)
+          localStorage.removeItem('lastNotificationKeyword')
+        }, 300)
+      }
+    }
+    
+    // 1. 추가: search-keyword 이벤트 리스닝
+    try {
+      // @ts-ignore
+      window.__TAURI__.event.listen('search-keyword', (event) => {
+        try {
+          // 키워드 추출 (문자열이나 객체 형태에 대응)
+          const keyword = typeof event.payload === 'string' 
+            ? event.payload  // 이미 문자열이면 그대로 사용
+            : (typeof event.payload === 'object' && event.payload && event.payload.keyword 
+              ? event.payload.keyword   // 객체에서 keyword 속성 추출
+              : null)
+          
+          if (keyword) {
+            console.log('수신된 검색 키워드:', keyword)
+            
+            // 1. 검색창에 키워드 설정 (set-search-term 이벤트 발생)
+            try {
+              // 검색창에 키워드 설정
+              const searchEvent = new CustomEvent('set-search-term', { detail: keyword })
+              document.dispatchEvent(searchEvent)
+              console.log('검색창에 키워드 설정됨:', keyword)
+              
+              // 2. 검색 상태 업데이트 (URL은 업데이트하지 않고 시각적으로만 검색 상태 표시)
+              searchTermFromQuery = keyword
+              isRecommendedSearch = true
+              
+              // 3. 검색 실행 - 검색창에 키워드가 표시된 후 약간 지연시켜 검색 실행
+              setTimeout(() => {
+                searchAndDisplay(keyword)
+              }, 200)
+            } catch (e) {
+              console.error('검색창 키워드 설정 오류:', e)
+            }
+          } else {
+            console.warn('search-keyword 이벤트에서 키워드를 찾을 수 없음')
+          }
+        } catch (e) {
+          console.error('search-keyword 이벤트 처리 오류:', e)
+        }
+      })
+    } catch (e) {
+      console.error('Error setting up search-keyword listener:', e)
+    }
+    
+    // 2. 추가: activation-complete 이벤트 리스닝
+    try {
+      // @ts-ignore
+      window.__TAURI__.event.listen('activation-complete', () => {
+        // 앱이 활성화되었을 때 추가 조치
+        // URL 파라미터로 키워드가 있는지 확인
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlKeyword = urlParams.get('keyword');
+        
+        // 이미 URL에 키워드가 있다면, 기존 키워드 처리는 무시
+        if (urlKeyword) {
+          console.log('이미 URL에 키워드가 있어 알림 키워드 처리 무시:', urlKeyword);
+          
+          // 마지막 알림 키워드가 현재 URL과 같으면 제거
+          const lastKeyword = localStorage.getItem('lastNotificationKeyword');
+          if (lastKeyword === urlKeyword) {
+            localStorage.removeItem('lastNotificationKeyword');
+          }
+          return;
+        }
+        
+        // 세션 스토리지에서 먼저 확인
+        const pendingKeyword = sessionStorage.getItem('pendingSearchKeyword');
+        if (pendingKeyword) {
+          console.log('앱 활성화: 세션 스토리지에서 키워드 발견:', pendingKeyword);
+          searchTermFromQuery = pendingKeyword;
+          isRecommendedSearch = true;
+          searchAndDisplay(pendingKeyword);
+          
+          // 사용 후 제거
+          sessionStorage.removeItem('pendingSearchKeyword');
+          return;
+        }
+        
+        // 로컬 스토리지에서 확인
+        const lastKeyword = localStorage.getItem('lastNotificationKeyword');
+        if (lastKeyword && (!searchTermFromQuery || searchTermFromQuery !== lastKeyword)) {
+          console.log('앱 활성화: 로컬 스토리지에서 키워드 발견:', lastKeyword);
+          searchTermFromQuery = lastKeyword;
+          isRecommendedSearch = true;
+          searchAndDisplay(lastKeyword);
+          
+          // 사용 후 제거
+          localStorage.removeItem('lastNotificationKeyword');
+        }
+      })
+    } catch (e) {
+      console.error('Error setting up activation-complete listener:', e)
+    }
     // START: Add main window event listener (navigation and centering)
     let unlistenNavigate: (() => void) | undefined
     listen("navigate-to-mcp-list-with-keyword", async (event) => {
@@ -150,10 +292,39 @@
       isRecommendedSearch = false // Clear recommendation state if search term is empty
       return fetchAllMCPs() // Load all if term is empty
     }
+    
+    // 키워드를 검색창에도 설정 (사용자 피드백용)
+    try {
+      // 이벤트 발생
+      const searchEvent = new CustomEvent('set-search-term', { detail: term })
+      document.dispatchEvent(searchEvent)
+    } catch (e) {
+      console.error('Failed to dispatch search event:', e)
+    }
+    
     // isRecommendedSearch can only be true if term exists, so don't change it here
     loading = true
     allLoaded = false // Reset allLoaded when loading new data
     try {
+      // 알림이 처리되었음을 사용자에게 표시 (타이밍 잠깐 지연)
+      setTimeout(() => {
+        if (isRecommendedSearch) {
+          try {
+            // 토스트 메시지 표시
+            const toastEvent = new CustomEvent('show-toast', {
+              detail: {
+                message: `'${term}' 키워드로 검색중..`,
+                type: 'info',
+                duration: 3000
+              }
+            })
+            document.dispatchEvent(toastEvent)
+          } catch (e) {
+            console.error('Toast event error:', e)
+          }
+        }
+      }, 100)
+      
       const response = await fetchMCPCards(term)
       mcpCards = response.cards
       pageInfo = response.page_info
@@ -165,11 +336,44 @@
         // Check scroll after initial load
         setTimeout(handleScroll, 500)
       }
+      
+      // 검색 결과 표시
+      if (isRecommendedSearch) {
+        try {
+          // 결과 토스트 메시지
+          const resultToast = new CustomEvent('show-toast', {
+            detail: {
+              message: `'${term}' 키워드 검색 결과: ${mcpCards.length}개 발견`,
+              type: mcpCards.length > 0 ? 'success' : 'warning',
+              duration: 3000
+            }
+          })
+          setTimeout(() => document.dispatchEvent(resultToast), 1000)
+        } catch (e) {
+          console.error('Result toast error:', e)
+        }
+      }
     } catch (error) {
       console.error("Error during search:", error)
       mcpCards = []
       pageInfo = { has_next_page: false, end_cursor: null, total_items: 0 }
       allLoaded = true
+      
+      // 검색 오류 표시
+      if (isRecommendedSearch) {
+        try {
+          const errorToast = new CustomEvent('show-toast', {
+            detail: {
+              message: `'${term}' 키워드 검색 오류 발생`,
+              type: 'error',
+              duration: 3000
+            }
+          })
+          document.dispatchEvent(errorToast)
+        } catch (e) {
+          console.error('Error toast error:', e)
+        }
+      }
     } finally {
       loading = false
       // Scroll to the top of the page
@@ -221,6 +425,8 @@
     await searchAndDisplay(searchTerm)
   }
 </script>
+
+<NotificationHandler />
 
 <div class="container mx-auto pb-8">
   <!-- Top header area (not fixed) - background color same as page background -->

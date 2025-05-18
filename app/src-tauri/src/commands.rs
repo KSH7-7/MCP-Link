@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
 use std::{env, fs, path::PathBuf, process::Command as StdCommand}; // env added for accessing environment variables at runtime
 use tauri::{AppHandle, Manager, State, Emitter};
-use tauri_plugin_notification::NotificationExt;
 use tokio::time::{sleep, Duration};
 use urlencoding::encode;
+use crate::force_activate;
 
 // --- Existing struct definitions (McpServerInfo, ApiCardData, PageInfo, DataWrapper, ApiResponse) ---
 #[derive(Debug, Deserialize)]
@@ -88,25 +88,6 @@ pub struct MCPCardResponse {
     pub page_info: PageInfoResponse,
 }
 
-// State struct for saving notification keywords
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct NotificationState {
-    pub pending_keyword: Option<String>,
-    pub timestamp: Option<i64>,
-    pub needs_activation: bool, // Whether app activation is needed
-}
-
-// Create mutex for notification state (global state management)
-lazy_static::lazy_static! {
-    static ref NOTIFICATION_STATE: std::sync::Mutex<NotificationState> = {
-
-        std::sync::Mutex::new(NotificationState {
-            pending_keyword: Some(" ".to_string()),
-            timestamp: Some(0),
-            needs_activation: false, // Initial state: activation not needed
-        })
-    };
-}
 
 // DetailApiResponse is now designed to parse the object obtained from `api_response_wrapper.data.get("mcpServer")`
 #[derive(Debug, Deserialize)]
@@ -961,111 +942,6 @@ pub fn read_mcplink_config_content(app: AppHandle) -> Result<String, String> {
         .map_err(|e| format!("Failed to read mcplink_desktop_config.json: {}", e))
 }
 
-#[tauri::command]
-pub async fn show_popup(app: AppHandle, tag: String) -> Result<(), String> {
-    // Clear any existing pending keyword first
-    if let Err(e) = clear_pending_notification_keyword() {
-        eprintln!("[Notification] Failed to clear previous keywords: {}", e);
-    }
-
-    // Set the pending keyword in the backend state
-    if let Err(e) = set_pending_notification_keyword(tag.clone()) {
-        eprintln!("[Notification] Failed to set pending keyword: {}", e);
-        return Err(format!("Failed to set pending keyword: {}", e));
-    }
-
-    // Create notification body with the tag information
-
-    let notification_body = format!("Selected keyword: {}. Click to confirm.", tag);
-
-    // Create and display notification
-    // Add settings for a more prominent notification
-    let builder = app
-        .notification()
-        .builder()
-        .title("키워드 추천 확인") // Korean title (more noticeable and clear)
-        .body(&notification_body)
-        .icon("icons/icon.png");
-
-    // Set notification priority (if supported by the system)
-    #[cfg(target_os = "windows")]
-    let builder = builder.sound("Default"); // Add sound effect on Windows
-
-    // Display notification
-    match builder.show() {
-        Ok(_) => println!("[Notification] Enhanced notification sent successfully"),
-        Err(e) => {
-            eprintln!("[Notification] Notification error: {}", e);
-            return Err(format!("Failed to show notification: {}", e));
-        }
-    }
-
-    // Clone variables for the async task
-    let app_clone = app.clone();
-    let _tag_clone = tag.clone(); // _tag_clone to avoid warning when variable is not used
-
-    // Start the delayed check task - use a shorter delay (1 second)
-    tauri::async_runtime::spawn(async move {
-        // Give the user time to click the notification (reduced to 1 second)
-        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-
-        // Check if the keyword is still pending (if the notification was not clicked)
-        let keyword_still_pending = match get_pending_notification_keyword() {
-            Ok(keyword) => !keyword.is_empty(),
-            Err(_) => false,
-        };
-
-        // If the keyword is still pending, force activate the app
-        if keyword_still_pending {
-            // Window activation (1): Check if the app window is already visible
-            if let Some(window) = app_clone.get_webview_window("main") {
-                // Check if the window is visible
-                let is_visible = window.is_visible().unwrap_or(false);
-
-                // If the window is not visible, show it
-                if !is_visible {
-                    if let Err(e) = window.show() {
-                        eprintln!("[Notification] Failed to show window: {}", e);
-                    }
-                }
-
-                // If the window is minimized, restore it
-                if window.is_minimized().unwrap_or(false) {
-                    if let Err(e) = window.unminimize() {
-                        eprintln!("[Notification] Failed to unminimize window: {}", e);
-                    }
-                }
-
-                // Set always on top and activate focus
-                if let Err(e) = window.set_always_on_top(true) {
-                    eprintln!(
-                        "[Notification] Failed to set window always on top: {}",
-                        e
-                    );
-                }
-
-                if let Err(e) = window.set_focus() {
-                    eprintln!("[Notification] Failed to set focus: {}", e);
-                }
-            }
-
-            // Window activation (2): Call the core activation function (this actually handles keyword processing and window activation)
-            match check_and_mark_app_activated(app_clone).await {
-                Ok(keyword_opt) => match keyword_opt {
-                    Some(k) => println!(
-                        "[Notification] Successfully activated app with keyword: {}",
-                        k
-                    ),
-                    None => println!("[Notification] App activated but no keyword was found"),
-                },
-                Err(e) => eprintln!("[Notification] Failed to activate app: {}", e),
-            }
-        } else {
-        }
-    });
-
-    Ok(())
-}
 
 // --- Modified function to check config file existence ---
 
@@ -1308,230 +1184,176 @@ pub fn is_mcp_server_installed(app: AppHandle, server_name: String) -> Result<bo
     Ok(servers.contains_key(&server_name))
 }
 
-/// Function to return the current time as a Unix timestamp
-fn get_current_time() -> Result<i64, String> {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Failed to get current time: {}", e))
-        .map(|d| d.as_secs() as i64)
-}
 
-/// Function to set the pending notification keyword
-#[tauri::command]
-pub fn set_pending_notification_keyword(keyword: String) -> Result<(), String> {
-    let mut state = NOTIFICATION_STATE
-        .lock()
-        .map_err(|e| format!("Failed to lock notification state: {}", e))?;
-
-    // Current time (Unix timestamp)
-    let now = get_current_time()?;
-
-    // Update state
-    state.pending_keyword = Some(keyword.clone());
-    state.timestamp = Some(now);
-    state.needs_activation = true; // Setting a notification means app activation is needed
-
-    Ok(())
-}
-
-/// Function to get any pending notification keyword
-/// Returns the keyword if one exists and is not expired, or an empty string otherwise
-#[tauri::command]
-pub fn get_pending_notification_keyword() -> Result<String, String> {
-    // Acquire the lock on the notification state
-    let mut state = NOTIFICATION_STATE
-        .lock()
-        .map_err(|e| format!("Failed to lock notification state: {}", e))?;
-
-    // Check if we have both a keyword and a timestamp
-    if let (Some(keyword), Some(timestamp)) = (&state.pending_keyword, &state.timestamp) {
-        // Check if the keyword has expired
-        let now = get_current_time().unwrap_or(0);
-
-        // Auto-clear keywords that are more than 30 seconds old
-        const KEYWORD_TIMEOUT_SECS: i64 = 30;
-        if now - timestamp > KEYWORD_TIMEOUT_SECS {
-            // Clear the expired keyword
-            state.pending_keyword = None;
-            state.timestamp = None;
-            state.needs_activation = false;
-
-            return Ok("".to_string());
-        }
-
-        // If keyword exists and is not expired, return it
-        return Ok(keyword.clone());
-    }
-
-    // No keyword found - return empty string
-    // Limit logging to every few checks to prevent log spam
-    static mut COUNT: u32 = 0;
-    unsafe {
-        COUNT += 1;
-        if COUNT % 10 == 0 {}
-    }
-
-    Ok("".to_string())
-}
-
-/// Activates the app window and processes any pending notification keywords
-/// Returns the keyword that was processed, if any
-#[tauri::command]
-pub async fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, String> {
-    // Extract keyword and reset state in a separate scope to ensure MutexGuard is dropped
-    let keyword = {
-        // Get the notification state
-        let mut state = NOTIFICATION_STATE
-            .lock()
-            .map_err(|e| format!("Failed to lock notification state: {}", e))?;
-
-        // Extract the keyword if there is one
-        let keyword = state.pending_keyword.clone();
-
-        // Only reset state if we actually had a keyword
-        if keyword.is_some() {
-            // Reset notification state
-            state.pending_keyword = None;
-            state.timestamp = None;
-            state.needs_activation = false;
-        }
-
-        // Return the keyword (will be None if no keyword was present)
-        keyword
-
-        // MutexGuard is automatically dropped here when this scope ends
-    };
-
-    // Process the keyword if we have one
-    if let Some(ref _kw) = keyword { // _kw to avoid warning when variable is not used
-        // Get the main window and activate it with several different methods
-        if let Some(window) = app.get_webview_window("main") {
-            // Enhanced window activation sequence
-
-            // 1. Basic show operation
-            if let Err(e) = window.show() {
-                eprintln!("[NotificationState] Failed to show window: {}", e);
-            }
-
-            // 2. Restore if minimized
-            if let Err(e) = window.unminimize() {
-                eprintln!("[NotificationState] Failed to unminimize window: {}", e);
-            }
-
-            // 3. Set window to always on top
-            if let Err(e) = window.set_always_on_top(true) {
-                eprintln!(
-                    "[NotificationState] Failed to set window always on top: {}",
-                    e
-                );
-            }
-
-            // 4. Activate and set focus (try multiple times)
-            for _ in 0..3 {
-                if let Err(e) = window.set_focus() {
-                    eprintln!("[NotificationState] Focus attempt failed: {}", e);
-                }
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-            }
-
-            // 5. Request user attention to force focus (flashes taskbar on Windows)
-            if let Err(e) = window.request_user_attention(Some(tauri::UserAttentionType::Critical))
-            {
-                eprintln!(
-                    "[NotificationState] Failed to request user attention: {}",
-                    e
-                );
-            }
-
-            // 6. Try focusing again after a short delay (needed on some OS)
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-            if let Err(e) = window.set_focus() {
-                eprintln!("[NotificationState] Final focus attempt failed: {}", e);
-            }
-
-            // 7. Special measure: Windows-specific focus command - changed to a non-resizing method
-            #[cfg(target_os = "windows")]
-            {
-                // 1. First, use a simple approach to ensure the window is definitely shown
-                let _ = window.show();
-                let _ = window.unminimize();
-
-                // 2. Request focus multiple times
-                for _ in 0..5 {
-                    let _ = window.set_focus();
-                    tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
-                }
-
-                // 3. Request user attention (use Informational instead of Critical for less aggression)
-                let _ =
-                    window.request_user_attention(Some(tauri::UserAttentionType::Informational));
-
-                // 4. Use always-on-top property for topmost display
-                let _ = window.set_always_on_top(true);
-
-                // 5. Use Tauri's built-in window centering function
-                let _ = window.center();
-
-                // 6. Focus again
-                let _ = window.set_focus();
-            }
-
-            // 8. Set timer to automatically disable always-on-top state
-            // Automatically disable always on top after 5 seconds
-            let window_clone = window.clone();
-            tauri::async_runtime::spawn(async move {
-                // 5-second delay
-                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-
-                // Disable always on top state
-                if let Err(e) = window_clone.set_always_on_top(false) {
-                    eprintln!("[NotificationState] Failed to remove always-on-top: {}", e);
-                }
-            });
-        } else {
-            eprintln!("[NotificationState] Main window not found");
-        }
-
-        return Ok(keyword);
-    }
-
-    // No keyword was present
-    Ok(None)
-}
-
-/// Function to check if the app is active
-#[tauri::command]
-pub fn is_app_active(app: AppHandle) -> Result<bool, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "Failed to get main window".to_string())?;
-
-    // Check if the window is visible
-    let is_visible = window.is_visible().unwrap_or(false);
-
-    Ok(is_visible)
-}
-
-/// Function to clear the pending notification keyword
-#[tauri::command]
-pub fn clear_pending_notification_keyword() -> Result<(), String> {
-    let mut state = NOTIFICATION_STATE
-        .lock()
-        .map_err(|e| format!("Failed to lock notification state: {}", e))?;
-
-    // Initialize state
-    state.pending_keyword = None;
-    state.timestamp = None;
-    state.needs_activation = false;
-
-    Ok(())
-}
 
 /// Function to reset MCP settings (excluding fallback server)
 #[tauri::command]
 pub fn reset_mcp_settings(app: AppHandle) -> Result<(), String> {
+    // 함수 내용 유지 (아래는 원래 코드를 다시 넣음)
     // Create Claude directory path
     let claude_dir = match std::env::consts::OS {
+        "windows" => {
+            let appdata = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| format!("Failed to get AppData directory: {}", e))?;
+            appdata.parent().unwrap_or(&appdata).join("Claude")
+        }
+        _ => {
+            return Err("Currently only supported on Windows".to_string());
+        }
+    };
+
+    // Configuration file paths
+    let claude_config_path = claude_dir.join("claude_desktop_config.json");
+    let mcplink_config_path = claude_dir.join("mcplink_desktop_config.json");
+
+    // 1. Process claude_desktop_config.json
+    if claude_config_path.exists() {
+        // Read configuration file
+        let config_str = fs::read_to_string(&claude_config_path)
+            .map_err(|e| format!("Failed to read claude config file: {}", e))?;
+
+        // Parse configuration
+        let mut config_value: Value = serde_json::from_str(&config_str)
+            .map_err(|e| format!("Failed to parse claude config file: {}", e))?;
+            
+        // Use general Value for more precise control
+        if let Value::Object(ref mut obj) = config_value {
+            // Find and process mcpServers (uppercase version)
+            if let Some(Value::Object(ref mut servers_map)) = obj.get_mut("mcpServers") {                
+                // Find fallback server
+                let fallback_server = servers_map.remove("McpFallbackServer")
+                    .or_else(|| servers_map.remove("MCPlink"));
+                
+                // Initialize map (remove all keys)
+                servers_map.clear();
+                
+                // If fallback server existed, add it back
+                if let Some(fallback) = fallback_server {
+                    servers_map.insert(String::from("McpFallbackServer"), fallback);
+                }
+            }
+            
+            // If lowercase mcp_servers value exists, remove it (to prevent creation)
+            obj.remove("mcp_servers");
+        }
+        
+        // Convert value back to ClaudeDesktopConfig
+        let config: ClaudeDesktopConfig = serde_json::from_value(config_value)
+            .map_err(|e| format!("Failed to convert value back to config: {}", e))?;
+
+        // Write modified configuration to file
+        let config_json = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize claude config: {}", e))?;
+
+        fs::write(&claude_config_path, config_json)
+            .map_err(|e| format!("Failed to write claude config file: {}", e))?;
+    }
+
+    // 2. Process mcplink_desktop_config.json
+    if mcplink_config_path.exists() {
+        // Read configuration file
+        let mcplink_str = fs::read_to_string(&mcplink_config_path)
+            .map_err(|e| format!("Failed to read mcplink config file: {}", e))?;
+
+        // Parse configuration
+        let mcplink_config: Map<String, Value> = serde_json::from_str(&mcplink_str)
+            .map_err(|e| format!("Failed to parse mcplink config file: {}", e))?;
+
+        // Create a new map that only keeps the fallback server with ID -1
+        let mut new_mcplink_config = Map::new();
+        if let Some(fallback_value) = mcplink_config.get("-1") {
+            new_mcplink_config.insert("-1".to_string(), fallback_value.clone());
+        }
+
+        // Write modified configuration to file
+        let mcplink_json = serde_json::to_string_pretty(&new_mcplink_config)
+            .map_err(|e| format!("Failed to serialize mcplink config: {}", e))?;
+
+        fs::write(&mcplink_config_path, mcplink_json)
+            .map_err(|e| format!("Failed to write mcplink config file: {}", e))?;
+    }
+
+    Ok(())
+}
+
+// 테스트를 위한 앱 강제 활성화 명령
+#[tauri::command]
+pub fn test_force_activate() -> Result<(), String> {
+    // 디버그 로그 파일에 기록
+    let log_path = std::env::temp_dir().join("mcplink_test.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] test_force_activate 명령 호출됨", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
+    
+    // 앱 강제 활성화 시도
+    force_activate::force_app_to_foreground()?;
+    
+    // 성공 로그
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] test_force_activate 명령 성공", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
+    
+    Ok(())
+}
+
+// 테스트를 위한 키워드 검색 기능
+#[tauri::command]
+pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String> {
+    // 디버그 로그 파일에 기록
+    let log_path = std::env::temp_dir().join("mcplink_test.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] test_search_keyword 명령 호출됨: {}", 
+            chrono::Local::now().format("%H:%M:%S"), keyword);
+    }
+    
+    // 앱 강제 활성화 시도
+    force_activate::force_app_to_foreground()?;
+    
+    // 키워드를 임시 파일에 저장
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+    if let Ok(mut file) = std::fs::File::create(&keyword_path) {
+        use std::io::Write;
+        let _ = write!(file, "{}", keyword);
+    }
+    
+    // Window 찾아서 search-keyword 이벤트 발생
+    if let Some(window) = app.get_webview_window("main") {
+        use tauri::Emitter;
+        let _ = window.emit("search-keyword", keyword.clone());
+    }
+    
+    // 성공 로그
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] test_search_keyword 명령 성공", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
+    
+    Ok(());
+}
         "windows" => {
             let appdata = app
                 .path()

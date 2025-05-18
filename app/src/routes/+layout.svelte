@@ -1,17 +1,21 @@
 <script lang="ts">
   import "../app.css"
   import { onMount, onDestroy } from "svelte"
+  import { showNotification } from "$lib/notifications"
   import { browser } from "$app/environment"
   import type { Window as TauriWindowType } from "@tauri-apps/api/window"
   import { Presentation, Cog, Minus, X, Square, Settings } from "lucide-svelte"
   import { page } from "$app/stores"
   import { goto } from "$app/navigation"
   import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-  import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window"
+  import { UserAttentionType } from "@tauri-apps/api/window"
   import { platform as getOsPlatform } from "@tauri-apps/plugin-os"
   import { invoke } from "@tauri-apps/api/core"
+  import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
   import Toast from "$lib/components/toast.svelte"
   import toastStore from "$lib/stores/toast"
+  import { initToastSystem, showToast } from "$lib/toast-system.js"
+  import { handleUriScheme } from "$lib/notifications"
 
   // --- Configuration for app appearance ---
   // Background class for the title bar and the tab bar area.
@@ -152,6 +156,23 @@
 
   // --- Lifecycle and Subscriptions ---
   onMount(async () => {
+    // 개선된 토스트 시스템 초기화
+    if (browser) {
+      initToastSystem();
+      
+      // URI 스킴 프로토콜 핸들러는 deep-link 플러그인으로 대체됨
+      // 이벤트 리스너로 처리하는 방식으로 변경
+      
+      // 테스트 토스트 알림 (개발 환경에서만)
+      if (import.meta.env.DEV) {
+        setTimeout(() => {
+          showToast("토스트 시스템이 성공적으로 초기화되었습니다.", {
+            title: "알림 시스템 초기화",
+            type: "success"
+          });
+        }, 1000);
+      }
+    }
     activeTabPath = $page.url.pathname
 
     if (browser) {
@@ -191,7 +212,7 @@
 
     if (typeof window !== "undefined" && "__TAURI__" in window) {
       try {
-        tauriWindow = await getCurrentWindow()
+        tauriWindow = WebviewWindow.getCurrent()
         
         // Set up event listeners
         unlistenMoveToCenter = await listen("move-main-to-center", async () => {

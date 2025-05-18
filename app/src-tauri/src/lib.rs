@@ -16,13 +16,15 @@ use dotenvy::dotenv;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Manager, Listener, Emitter,
 };
-use tauri_plugin_notification::{NotificationExt, PermissionState};
 use tokio::sync::Mutex;
 
 pub mod commands;
+pub mod notification_system;
+pub mod force_activate;
 use crate::commands::AppState;
+use crate::notification_system::{init_notification_system, KeywordState};
 
 // POST request logging middleware function
 async fn log_post_requests(
@@ -69,52 +71,60 @@ async fn handle_recommendations(
     AxumState(state): AxumState<RecommendationServerState>,
     Json(payload): Json<KeywordsPayload>,
 ) -> StatusCode {
-    // Convert keywords to a comma-separated string
-    let keywords_str = payload.keywords.join(", ");
-
-    // Send notification using AppHandle
+    // 키워드를 받아서 알림 표시 및 이벤트 발생
     if let Some(app_handle) = &*state.app_handle.lock().await {
-        
-        // Set the first keyword as pending keyword
-        if let Some(first_keyword) = payload.keywords.first() {
+        // 첫 번째 키워드 추출 (메인 키워드로 사용)
+        if let Some(main_keyword) = payload.keywords.first() {
+            // 모든 키워드를 문자열로 합치기
+            let keywords_str = payload.keywords.join(", ");
             
-            // First, initialize app state (if previous data exists)
-            if let Err(e) = commands::clear_pending_notification_keyword() {
-                eprintln!("[Recommendation] Failed to clear previous keywords: {}", e);
+            // 알림 제목과 내용 설정
+            let title = "MCP 키워드 추천";
+            let body = format!("검색어: {}", keywords_str);
+            
+            // 네이티브 알림 표시 시도
+            #[cfg(target_os = "windows")]
+            {
+                if let Err(e) = notification_system::show_windows_notification(
+                    title, 
+                    &body, 
+                    Some(main_keyword)
+                ) {
+                    eprintln!("[Recommendation] Failed to show Windows notification: {}", e);
+                }
             }
             
-            // Set pending notification keyword (for notification click handling)
-            if let Err(e) = commands::set_pending_notification_keyword(first_keyword.clone()) {
-                eprintln!("[Recommendation] Failed to set pending keyword: {}", e);
-            } else {
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = notification_system::show_macos_notification(
+                    title, 
+                    &body, 
+                    Some(main_keyword)
+                ) {
+                    eprintln!("[Recommendation] Failed to show macOS notification: {}", e);
+                }
+            }
+            
+            #[cfg(target_os = "linux")]
+            {
+                if let Err(e) = notification_system::show_linux_notification(
+                    title, 
+                    &body, 
+                    Some(main_keyword)
+                ) {
+                    eprintln!("[Recommendation] Failed to show Linux notification: {}", e);
+                }
+            }
+            
+            // 키워드 상태에 저장
+            if let Some(keyword_state) = app_handle.try_state::<KeywordState>() {
+                keyword_state.set_keyword(main_keyword.clone());
             }
         }
         
-        // Utilize existing notification logic
-        let notification_body = format!("Selected keywords: {}. Click to check.", keywords_str);
-
-        let builder = app_handle
-            .notification()
-            .builder()
-            .title("New Recommended Keywords") // Title in English
-            .body(&notification_body)
-            .icon("icons/icon.png");
-
-        match builder.show() {
-            Ok(_) => {
-            }
-            Err(e) => {
-                eprintln!("[Recommendation] Failed to send notification: {}", e);
-            }
-        }
-
-        // Use emit instead of emit_all - Explicitly use Emitter trait
-        {
-            use tauri::Emitter;
-            let _ = app_handle.emit("new-keywords", payload.keywords.clone());
-        }
-    } else {
-        eprintln!("[Recommendation] AppHandle not set, cannot send notification");
+        // 키워드 이벤트 발생 (UI 반응용)
+        use tauri::Emitter;
+        let _ = app_handle.emit("new-keywords", payload.keywords.clone());
     }
 
     StatusCode::OK
@@ -122,29 +132,9 @@ async fn handle_recommendations(
 
 // Handler for /api/v1 requests
 async fn handle_api_v1_request(
-    AxumState(state): AxumState<RecommendationServerState>,
+    AxumState(_state): AxumState<RecommendationServerState>,
 ) -> StatusCode {
-    // Send notification using AppHandle
-    if let Some(app_handle) = &*state.app_handle.lock().await {
-        // Set notification body
-        let notification_body = String::from("New data received. (From /api/v1)");
-
-        // Create and display notification
-        let builder = app_handle
-            .notification()
-            .builder()
-            .title("API Notification") // Title in English
-            .body(&notification_body)
-            .icon("icons/icon.png");
-
-        // Attempt to display notification and log result
-        match builder.show() {
-            Ok(_) => {}
-            Err(_e) => {}
-        }
-    } else {
-    }
-
+    // Just return OK
     StatusCode::OK
 }
 
@@ -215,9 +205,10 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_notification::init()) // Initialize notification plugin
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // 새로운 인스턴스가 실행됐을 때, 기존 창에 포커스
             app.get_webview_window("main")
                 .expect("메인 창을 찾을 수 없습니다")
@@ -236,6 +227,304 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            // 알림 시스템 초기화
+            if let Err(e) = init_notification_system(app) {
+                eprintln!("Failed to initialize notification system: {}", e);
+            }
+            
+            // Deep Link 리스너 설정
+            let app_handle_for_deeplink = app.handle().clone();
+            
+            // 로그 파일 설정
+            let log_path = std::env::temp_dir().join("mcplink_debug.log");
+            let log_path_str = log_path.to_string_lossy().to_string();
+            eprintln!("DEBUG LOG FILE: {}", log_path_str);
+            
+            // 디버그용 로그 파일에 시작 메시지 기록
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&log_path) {
+                use std::io::Write;
+                let _ = writeln!(file, "=== MCPLink Debug Log Started at {} ===", 
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+                let _ = writeln!(file, "Waiting for deep link events...");
+            }
+            
+            // 키워드 파일 읽기 함수 등록
+            // 알림에서 저장된 키워드를 읽어 처리
+            let app_handle_clone = app.handle().clone();
+            tokio::spawn(async move {
+                use std::time::Duration;
+                std::thread::sleep(Duration::from_secs(1));
+                
+                // 키워드 파일 경로
+                let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+                
+                // 파일이 존재하면 읽기 시도
+                if keyword_path.exists() {
+                    if let Ok(keyword) = std::fs::read_to_string(&keyword_path) {
+                        if !keyword.is_empty() {
+                            // 로그 파일에 기록
+                            let log_path = std::env::temp_dir().join("mcplink_activation.log");
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path) {
+                                use std::io::Write;
+                                let _ = writeln!(file, "[{}] 임시 파일에서 키워드 읽음: {}", 
+                                    chrono::Local::now().format("%H:%M:%S"), keyword);
+                            }
+                            
+                            // 키워드를 세션 스토리지에 저장하도록 이벤트 발생
+                            if let Some(window) = app_handle_clone.get_webview_window("main") {
+                                let _ = window.emit("search-keyword", &keyword);
+                                
+                                // 로그 파일에 기록
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path) {
+                                    use std::io::Write;
+                                    let _ = writeln!(file, "[{}] search-keyword 이벤트 발생: {}", 
+                                        chrono::Local::now().format("%H:%M:%S"), keyword);
+                                }
+                            } else {
+                                // 로그 파일에 기록
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path) {
+                                    use std::io::Write;
+                                    let _ = writeln!(file, "[{}] 창을 찾을 수 없어 이벤트 발생 실패", 
+                                        chrono::Local::now().format("%H:%M:%S"));
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 읽은 후 파일 삭제
+                    let _ = std::fs::remove_file(&keyword_path);
+                }
+            });
+            
+            // deep-link 이벤트 리스닝
+            let log_path_clone = log_path.clone();
+            let _ = app.listen("deep-link://new-url", move |event| {
+                // 이벤트 페이로드를 문자열로 처리
+                let url = event.payload().to_string();
+                let app_handle = app_handle_for_deeplink.clone();
+                eprintln!("Deep Link received: {}", url);
+                
+                // 디버그 로그 파일에 기록
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path_clone) {
+                    use std::io::Write;
+                    let _ = writeln!(file, "[{}] Deep Link received: {}", 
+                        chrono::Local::now().format("%H:%M:%S"), url);
+                }
+                
+                // URL 파싱
+                // URL 파싱 - 더 자세한 디버깅 로그 추가
+                eprintln!("Processing URL: {}", url);
+                
+                // 로그 파일에 기록
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path_clone) {
+                    use std::io::Write;
+                    let _ = writeln!(file, "[{}] Processing URL: {}", 
+                        chrono::Local::now().format("%H:%M:%S"), url);
+                }
+                
+                // mcplink 프로토콜 확인 (URL 형식에 따라 검사 방식 조정)
+                if url.contains("mcplink") {
+                    eprintln!("mcplink protocol detected");
+                    
+                    // 로그 파일에 기록
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .append(true)
+                        .open(&log_path_clone) {
+                        use std::io::Write;
+                        let _ = writeln!(file, "[{}] mcplink protocol detected", 
+                            chrono::Local::now().format("%H:%M:%S"));
+                    }
+                    
+                    // 키워드 추출 - 다양한 URL 형식 처리
+                    let keyword = if url.contains("keyword=") {
+                        eprintln!("keyword parameter found");
+                        
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path_clone) {
+                            use std::io::Write;
+                            let _ = writeln!(file, "[{}] keyword parameter found", 
+                                chrono::Local::now().format("%H:%M:%S"));
+                        }
+                        
+                        let parts: Vec<&str> = url.split("keyword=").collect();
+                        if parts.len() > 1 {
+                            let extracted = parts[1].trim().to_string();
+                            // ? 또는 & 이후 부분 제거
+                            let clean_keyword = if let Some(pos) = extracted.find(&['?', '&'][..]) {
+                                extracted[..pos].to_string()
+                            } else {
+                                extracted
+                            };
+                            eprintln!("Extracted keyword: {}", clean_keyword);
+                            
+                            // 로그 파일에 기록
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path_clone) {
+                                use std::io::Write;
+                                let _ = writeln!(file, "[{}] Extracted keyword: {}", 
+                                    chrono::Local::now().format("%H:%M:%S"), clean_keyword);
+                            }
+                            
+                            Some(clean_keyword)
+                        } else {
+                            eprintln!("Cannot extract keyword from parts");
+                            
+                            // 로그 파일에 기록
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path_clone) {
+                                use std::io::Write;
+                                let _ = writeln!(file, "[{}] Cannot extract keyword from parts", 
+                                    chrono::Local::now().format("%H:%M:%S"));
+                            }
+                            
+                            None
+                        }
+                    } else {
+                        eprintln!("No keyword parameter found");
+                        
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path_clone) {
+                            use std::io::Write;
+                            let _ = writeln!(file, "[{}] No keyword parameter found", 
+                                chrono::Local::now().format("%H:%M:%S"));
+                        }
+                        
+                        None
+                    };
+                    
+                    // 앱 활성화
+                    let window_result = app_handle.get_webview_window("main");
+                    
+                    // 로그 파일에 기록
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .append(true)
+                        .open(&log_path_clone) {
+                        use std::io::Write;
+                        let _ = writeln!(file, "[{}] Window lookup result: {}", 
+                            chrono::Local::now().format("%H:%M:%S"), 
+                            if window_result.is_some() { "success" } else { "failed" });
+                    }
+                    
+                    if let Some(window) = window_result {
+                        // 앱 창 활성화 시도
+                        let show_result = window.show();
+                        let unminimize_result = window.unminimize();
+                        let focus_result = window.set_focus();
+                        
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path_clone) {
+                            use std::io::Write;
+                            let _ = writeln!(file, "[{}] Window activation: show={:?}, unminimize={:?}, focus={:?}", 
+                                chrono::Local::now().format("%H:%M:%S"),
+                                show_result.is_ok(),
+                                unminimize_result.is_ok(),
+                                focus_result.is_ok());
+                        }
+                        
+                        // 키워드가 있으면 검색 이벤트 발생
+                        if let Some(kw) = keyword {
+                            // 단순화: 키워드만 전달하는 방식으로 변경
+                            let emit_result = window.emit("search-keyword", kw.clone());
+                            
+                            // 로그 파일에 기록
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path_clone) {
+                                use std::io::Write;
+                                let _ = writeln!(file, "[{}] Emitting search-keyword event with '{}': {:?}", 
+                                    chrono::Local::now().format("%H:%M:%S"),
+                                    kw,
+                                    emit_result.is_ok());
+                            }
+                        }
+                    } else {
+                        // 창을 찾을 수 없는 경우 에러 로그
+                        eprintln!("Failed to find main window!");
+                        
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path_clone) {
+                            use std::io::Write;
+                            let _ = writeln!(file, "[{}] ERROR: Failed to find main window!", 
+                                chrono::Local::now().format("%H:%M:%S"));
+                            
+                            // 대안으로 새 창 생성 시도
+                            let _ = writeln!(file, "[{}] Attempting to create a new window...", 
+                                chrono::Local::now().format("%H:%M:%S"));
+                            
+                            // 키워드 정보 로깅
+                            if let Some(kw) = keyword.clone() {
+                                let _ = writeln!(file, "[{}] Keyword found: {}", 
+                                    chrono::Local::now().format("%H:%M:%S"), kw);
+                            } else {
+                                let _ = writeln!(file, "[{}] No keyword found", 
+                                    chrono::Local::now().format("%H:%M:%S"));
+                            };
+                            
+                            // 창 목록 수동 확인
+                            let _ = writeln!(file, "[{}] Window lookup failed - manually check for main window", 
+                                chrono::Local::now().format("%H:%M:%S"));
+                            
+                            // 메인 윈도우가 있는지 명시적으로 확인 
+                            let main_window = app_handle.get_webview_window("main");
+                            let _ = writeln!(file, "[{}] Manual main window check: {}", 
+                                chrono::Local::now().format("%H:%M:%S"),
+                                if main_window.is_some() { "found" } else { "not found" });
+                        }
+                    }
+                }
+            });
             // Create menu items
             let open_item = MenuItemBuilder::with_id("open", "Open").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -254,7 +543,7 @@ pub fn run() {
 
             // Create tray icon
             let _tray = TrayIconBuilder::new()
-                .tooltip("Keyword Search")
+                .tooltip("MCP Link")
                 .icon(app.default_window_icon().cloned().unwrap())
                 .menu(&menu)
                 .on_menu_event(move |app_handle, event| match event.id().as_ref() {
@@ -292,66 +581,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // --- Start of notification click handler modification ---
-            let app_handle = app.handle().clone(); // Clone app_handle here to use in the closure below
-
-            // Check and log notification permission state on app start
-            if let Ok(permission_state) = app_handle.notification().permission_state() {
-                if permission_state != PermissionState::Granted {
-                    // If permission not granted, request it
-                    if let Ok(_new_state) = app_handle.notification().request_permission() {
-                        // Permission request sent, new state can be handled if needed
-                    }
-                }
-            }
-
-            // Common function to extract tag
-            fn extract_tag_from_body(body: &str) -> Option<String> {
-                // Extracts TAG from "Selected keywords: TAG. Click to check."
-                if let Some(start) = body.find("Selected keywords: ") { // Find the English part for tag extraction
-                    let start_idx = start + "Selected keywords: ".len();
-                    if let Some(end) = body[start_idx..].find(". ") {
-                        let tag = body[start_idx..(start_idx + end)].to_string();
-                        return Some(tag);
-                    }
-                }
-                None
-            }
-
-            // Notification handler function
-            fn handle_notification(body: &str, app_handle: &tauri::AppHandle) {
-                // Get main window
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    // 1. Activate window (process in the same order)
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-
-                    // 2. Bring window to front
-                    let _ = window.set_always_on_top(true);
-                    let _ = window.set_focus(); // Redundant if already focused, but ensures focus
-                    let _ = window.set_always_on_top(false);
-
-                    // 3. Tag extraction logic
-                    let final_tag = extract_tag_from_body(body).unwrap_or_else(|| {
-                        // Default tag if extraction fails
-                        "GOOGLE".to_string()
-                    });
-
-                    // 4. Emit events
-                    // Navigate to MCP-list page
-                    let target_url = format!("/MCP-list?keyword={}", final_tag);
-                    // Emit event - navigate to page using navigate-to (use emit instead of emit_all)
-                    // Explicitly use Emitter trait
-                    {
-                        use tauri::Emitter;
-                        let _ = window.emit("navigate-to", target_url.clone());
-                        let _ = window.emit("navigate-to-mcp-list-with-keyword", target_url);
-                    }
-                }
-            }
-            // --- End of notification click handler modification ---
-
+            
             // --- Start of Axum server startup code addition ---
             let app_handle_for_axum = app.handle().clone();
 
@@ -375,7 +605,6 @@ pub fn run() {
         })
         .manage(app_state) // Manage AppState with Tauri
         .invoke_handler(tauri::generate_handler![
-            commands::show_popup,
             commands::get_mcp_data,
             commands::get_mcp_detail_data,
             commands::add_mcp_server_config,
@@ -388,14 +617,12 @@ pub fn run() {
             commands::read_mcp_server_config,
             commands::is_mcp_server_installed,
             commands::reset_mcp_settings,
-            commands::set_pending_notification_keyword,
-            commands::get_pending_notification_keyword,
-            commands::clear_pending_notification_keyword,
-            commands::check_and_mark_app_activated,
-            commands::is_app_active,
             commands::search_local_mcp_servers,
             commands::ensure_config_files,
             commands::start_config_watch,
+            commands::test_force_activate,
+            commands::test_search_keyword,
+            notification_system::show_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

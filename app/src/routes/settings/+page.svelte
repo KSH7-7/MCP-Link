@@ -2,10 +2,12 @@
   import { invoke } from "@tauri-apps/api/core"
   import ConfirmModal from "$lib/components/confirm-modal.svelte"
   import { showSuccess, showError } from "$lib/stores/toast"
+  import NotificationTest from './notification-test.svelte'
   
   let configPath = ""
   let isResetting = false
   let showResetConfirmModal = false
+  let showNotificationTest = false
 
   // Function to show reset confirmation modal
   function showResetConfirmation() {
@@ -31,6 +33,20 @@
 
 <div class="p-8 max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Settings</h1>
+  
+  <div class="flex justify-end mb-4">
+    <button 
+      class="btn btn-primary btn-sm"
+      on:click={() => showNotificationTest = !showNotificationTest}
+    >
+      {showNotificationTest ? 'Hide Notification Test' : 'Show Notification Test'}
+    </button>
+  </div>
+  
+  {#if showNotificationTest}
+    <NotificationTest />
+    <div class="divider my-6"></div>
+  {/if}
   
   <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200 text-center">
     <h2 class="text-lg font-semibold mb-4 text-center">Reset Configurations</h2>
