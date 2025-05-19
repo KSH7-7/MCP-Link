@@ -88,7 +88,7 @@ async fn handle_recommendations(
                 if let Err(e) = notification_system::show_windows_notification(
                     title, 
                     &body, 
-                    Some(main_keyword)
+                    Some(main_keyword.to_string())
                 ) {
                     eprintln!("[Recommendation] Failed to show Windows notification: {}", e);
                 }
@@ -99,7 +99,7 @@ async fn handle_recommendations(
                 if let Err(e) = notification_system::show_macos_notification(
                     title, 
                     &body, 
-                    Some(main_keyword)
+                    Some(main_keyword.to_string())
                 ) {
                     eprintln!("[Recommendation] Failed to show macOS notification: {}", e);
                 }
@@ -110,7 +110,7 @@ async fn handle_recommendations(
                 if let Err(e) = notification_system::show_linux_notification(
                     title, 
                     &body, 
-                    Some(main_keyword)
+                    Some(main_keyword.to_string())
                 ) {
                     eprintln!("[Recommendation] Failed to show Linux notification: {}", e);
                 }
@@ -190,6 +190,22 @@ pub fn run() {
     #[cfg(debug_assertions)]
     let _ = dotenv();
     
+    // 앱 활성화 로그 초기화
+    let activation_log_path = std::env::temp_dir().join("mcplink_activation.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&activation_log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "\n\n=== [{}] MCPLink 앱 시작됨 ===", 
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+        
+        // OS 정보 로깅
+        let _ = writeln!(file, "OS: {}", std::env::consts::OS);
+        let _ = writeln!(file, "ARCH: {}", std::env::consts::ARCH);
+    }
+    
     // Create AppState (maintains client for API requests)
     let app_state = AppState {
         client: Client::new(),
@@ -255,9 +271,12 @@ pub fn run() {
             // 키워드 파일 읽기 함수 등록
             // 알림에서 저장된 키워드를 읽어 처리
             let app_handle_clone = app.handle().clone();
-            tokio::spawn(async move {
-                use std::time::Duration;
-                std::thread::sleep(Duration::from_secs(1));
+            
+            // Tokio 런타임을 명시적으로 시작하여 비동기 작업 실행
+            // 별도의 스레드에서 표준 스레드 API를 사용하여 비동기 작업 실행
+            std::thread::spawn(move || {
+                // 잠시 대기 후 키워드 파일 확인
+                std::thread::sleep(std::time::Duration::from_secs(1));
                 
                 // 키워드 파일 경로
                 let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
@@ -585,18 +604,24 @@ pub fn run() {
             // --- Start of Axum server startup code addition ---
             let app_handle_for_axum = app.handle().clone();
 
-            // Set AppHandle and start Axum server
-            tauri::async_runtime::spawn(async move {
-                // Set AppHandle
-                recommendation_server_state_clone
-                    .set_app_handle(app_handle_for_axum)
-                    .await;
-
-                // Start Axum server
-                match start_axum_server(recommendation_server_state_clone).await {
-                    Ok(_) => {}
-                    Err(_e) => {}
-                }
+            // 별도의 스레드에서 Tokio 런타임을 초기화하고 Axum 서버 시작
+            std::thread::spawn(move || {
+                // 새로운 Tokio 런타임 생성
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                
+                // Tokio 런타임에서 비동기 작업 실행
+                rt.block_on(async {
+                    // Set AppHandle
+                    recommendation_server_state_clone
+                        .set_app_handle(app_handle_for_axum)
+                        .await;
+    
+                    // Start Axum server
+                    match start_axum_server(recommendation_server_state_clone).await {
+                        Ok(_) => {}
+                        Err(_e) => {}
+                    }
+                });
             });
 
             // --- End of Axum server startup code addition ---
@@ -622,6 +647,7 @@ pub fn run() {
             commands::start_config_watch,
             commands::test_force_activate,
             commands::test_search_keyword,
+            commands::simulate_notification_click,
             notification_system::show_notification,
         ])
         .run(tauri::generate_context!())

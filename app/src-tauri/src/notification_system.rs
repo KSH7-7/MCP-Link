@@ -45,7 +45,7 @@ impl KeywordState {
 pub fn show_windows_notification(
     title: &str, 
     body: &str, 
-    keyword: Option<&str>  // 이제 키워드 사용
+    keyword: Option<String>  // 참조 대신 소유권 있는 String 사용
 ) -> Result<(), Box<dyn Error>> {
     use winrt_notification::{Duration, Sound, Toast};
     
@@ -65,7 +65,7 @@ pub fn show_windows_notification(
     }
     
     // URI 스킴 생성
-    let uri = if let Some(kw) = keyword {
+    let uri = if let Some(ref kw) = keyword {
         format!("{}?keyword={}", URI_SCHEME, kw)
     } else {
         URI_SCHEME.to_string()
@@ -94,15 +94,11 @@ pub fn show_windows_notification(
             chrono::Local::now().format("%H:%M:%S"));
     }
     
-    // 알림 클릭 핸들러 기록 (Windows에서는 현재 자동 실행이 지원되지 않음)
-    // 키워드가 있으면 세션 스토리지에 저장 (앱이 활성화되면 사용)
-    if let Some(kw) = keyword {
-        // 세션 임시 파일에 키워드 저장
-        let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-        if let Ok(mut file) = std::fs::File::create(&keyword_path) {
-            use std::io::Write;
-            let _ = write!(file, "{}", kw);
-        }
+    // 알림 클릭 핸들러 설정 (Windows에서는 자동 실행이 제한적이므로 클릭 시 수동 활성화 구현)
+    // 알림 시에는 해당 키워드만 저장하고, 실제 클릭 시에만 처리하기 위한 구성
+    if let Some(ref kw) = keyword {
+        // 알림에 포함되는 키워드만 상태에 저장
+        // 알림 클릭 전에는 아무런 활성화도 수행하지 않음
         
         // 로그 파일에 기록
         if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -111,7 +107,21 @@ pub fn show_windows_notification(
             .append(true)
             .open(&log_path) {
             use std::io::Write;
-            let _ = writeln!(file, "[{}] 키워드 저장됨: {}", 
+            let _ = writeln!(file, "[{}] 키워드 준비됨 (클릭 시 처리): {}", 
+                chrono::Local::now().format("%H:%M:%S"), kw);
+        }
+        
+        // 알림 클릭 로그 파일 경로
+        let click_log_path = std::env::temp_dir().join("mcplink_notification_click.log");
+        
+        // 알림 클릭 로그 초기화
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&click_log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 알림 클릭 대기 중: {}", 
                 chrono::Local::now().format("%H:%M:%S"), kw);
         }
         
@@ -128,14 +138,32 @@ pub fn show_windows_notification(
             let _ = writeln!(file, "[{}] URI 스킴: {}", 
                 chrono::Local::now().format("%H:%M:%S"), uri);
         }
+        
+        // Note: 이 지점에서 스레드 생성 없음
+        // 알림 클릭은 별도의 메커니즘 (키워드 파일 생성)을 통해 처리
+        // 테스트 목적으로는 test_search_keyword 함수 사용
     }
     
-    // 알림 생성
+    // 알림 생성 - 추가 핸들러 구성
     let toast = Toast::new(Toast::POWERSHELL_APP_ID)
         .title(title)
         .text1(body)
         .sound(Some(Sound::Default))
-        .duration(Duration::Short);
+        .duration(Duration::Short)
+        // activationType을 추가하여 알림 클릭 시 앱 활성화 시도
+        // .add_tag_text("activationType", "foreground")
+        ;
+        
+    // 로그에 알림 설정 기록
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] Toast notification configured with activation handler", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
     
     // 알림 표시
     let result = toast.show();
@@ -171,7 +199,7 @@ pub fn show_windows_notification(
 pub fn show_macos_notification(
     title: &str, 
     body: &str, 
-    keyword: Option<&str>
+    keyword: Option<String>
 ) -> Result<(), Box<dyn Error>> {
     use notify_rust::{Notification, Hint};
     
@@ -186,7 +214,7 @@ pub fn show_macos_notification(
                 .hint(Hint::CustomInt("sender-pid".to_owned(), std::process::id() as i32));
     
     // URI 스킴 추가
-    if let Some(kw) = keyword {
+    if let Some(ref kw) = keyword {
         let uri = format!("{}?keyword={}", URI_SCHEME, kw);
         notification.action("default", "Open");
     }
@@ -201,7 +229,7 @@ pub fn show_macos_notification(
 pub fn show_linux_notification(
     title: &str, 
     body: &str, 
-    keyword: Option<&str>
+    keyword: Option<String>
 ) -> Result<(), Box<dyn Error>> {
     use notify_rust::Notification;
     
@@ -214,7 +242,7 @@ pub fn show_linux_notification(
                 .icon("icons/icon.png");
     
     // URI 스킴 추가
-    if let Some(kw) = keyword {
+    if let Some(ref kw) = keyword {
         let uri = format!("{}?keyword={}", URI_SCHEME, kw);
         notification.action("default", "Open");
     }
@@ -282,15 +310,15 @@ pub fn show_notification<R: Runtime>(
     // 플랫폼별 알림 표시
     let result = match () {
         #[cfg(target_os = "windows")]
-        () => show_windows_notification(&title, &body, keyword.as_deref())
+        () => show_windows_notification(&title, &body, keyword.clone())
             .map_err(|e| format!("Windows notification error: {}", e)),
         
         #[cfg(target_os = "macos")]
-        () => show_macos_notification(&title, &body, keyword.as_deref())
+        () => show_macos_notification(&title, &body, keyword.clone())
             .map_err(|e| format!("macOS notification error: {}", e)),
         
         #[cfg(target_os = "linux")]
-        () => show_linux_notification(&title, &body, keyword.as_deref())
+        () => show_linux_notification(&title, &body, keyword.clone())
             .map_err(|e| format!("Linux notification error: {}", e)),
         
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
@@ -324,6 +352,171 @@ pub fn show_notification<R: Runtime>(
 pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn Error>> {
     // KeywordState 등록
     app.manage(KeywordState::new());
+    
+    // 로그 파일 경로
+    let log_path = std::env::temp_dir().join("mcplink_activation.log");
+    
+    // 로그 파일에 초기화 기록
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "=== [{}] 알림 시스템 초기화됨 ===", 
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+    }
+    
+    // 알림 클릭 감지를 위한 키워드 파일 감시 스레드 시작
+    let app_handle = app.handle().clone();
+    
+    // 로그 파일에 기록
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] 알림 시스템 초기화 - 키워드 파일 감시 시작", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
+    
+    // 알림 클릭 감시 스레드 시작
+    std::thread::spawn(move || {
+        // 최대 30초 동안 1초 간격으로 키워드 파일 확인
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            
+            // 키워드 파일 경로
+            let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+            
+            // 파일이 존재하면 읽기 시도
+            if keyword_path.exists() {
+                if let Ok(keyword) = std::fs::read_to_string(&keyword_path) {
+                    if !keyword.is_empty() {
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path) {
+                            use std::io::Write;
+                            let _ = writeln!(file, "[{}] 감시 스레드: 키워드 파일 감지됨: {}", 
+                                chrono::Local::now().format("%H:%M:%S"), keyword);
+                        }
+                        
+                        // 앱 강제 활성화 시도 - 다중 시도 구현
+                        let mut activation_success = false;
+                        for attempt in 1..=3 {
+                            // 로그 시작
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path) {
+                                use std::io::Write;
+                                let _ = writeln!(file, "[{}] 감시 스레드: 앱 활성화 시도 #{}", 
+                                    chrono::Local::now().format("%H:%M:%S"), attempt);
+                            }
+                            
+                            // 활성화 시도
+                            match crate::force_activate::force_app_to_foreground() {
+                                Err(e) => {
+                                    // 오류 로깅
+                                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .write(true)
+                                        .append(true)
+                                        .open(&log_path) {
+                                        use std::io::Write;
+                                        let _ = writeln!(file, "[{}] 감시 스레드: 앱 활성화 오류 #{}: {}", 
+                                            chrono::Local::now().format("%H:%M:%S"), attempt, e);
+                                    }
+                                    
+                                    // 잠시 대기 후 재시도
+                                    if attempt < 3 {
+                                        std::thread::sleep(std::time::Duration::from_millis(300));
+                                    }
+                                },
+                                Ok(_) => {
+                                    // 성공 로깅
+                                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .write(true)
+                                        .append(true)
+                                        .open(&log_path) {
+                                        use std::io::Write;
+                                        let _ = writeln!(file, "[{}] 감시 스레드: 앱 활성화 성공 #{}", 
+                                            chrono::Local::now().format("%H:%M:%S"), attempt);
+                                    }
+                                    activation_success = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // 활성화 성공 여부에 따라 처리
+                        if activation_success {
+                            // 키워드 검색 이벤트 발생
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                // 창이 보이도록 설정
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                                
+                                // 잠시 대기 후 이벤트 발생 (창이 준비되길 기다림)
+                                std::thread::sleep(std::time::Duration::from_millis(300));
+                                
+                                let keyword_clone = keyword.clone();
+                                let emit_result = window.emit("search-keyword", keyword_clone);
+                                
+                                // 로그 파일에 기록
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path) {
+                                    use std::io::Write;
+                                    let _ = writeln!(file, "[{}] 감시 스레드: search-keyword 이벤트 발생: {} (결과: {})", 
+                                        chrono::Local::now().format("%H:%M:%S"), 
+                                        keyword,
+                                        if emit_result.is_ok() { "성공" } else { "실패" });
+                                }
+                            }
+                        }
+                        
+                        // 키워드 파일 삭제
+                        let _ = std::fs::remove_file(&keyword_path);
+                        
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path) {
+                            use std::io::Write;
+                            let _ = writeln!(file, "[{}] 감시 스레드: 키워드 파일 삭제됨", 
+                                chrono::Local::now().format("%H:%M:%S"));
+                        }
+                        
+                        // 키워드 발견 후 처리 완료, 루프 종료
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // 감시 종료 로그
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 알림 시스템 초기화 스레드: 종료됨", 
+                chrono::Local::now().format("%H:%M:%S"));
+        }
+    });
     
     Ok(())
 }

@@ -1293,8 +1293,34 @@ pub fn test_force_activate() -> Result<(), String> {
             chrono::Local::now().format("%H:%M:%S"));
     }
     
+    // 활성화 로그 파일 경로
+    let activation_log_path = std::env::temp_dir().join("mcplink_activation.log");
+    
+    // 활성화 로그 초기화
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&activation_log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] === 테스트 강제 활성화 시작 ===", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
+    
     // 앱 강제 활성화 시도
-    force_activate::force_app_to_foreground()?;
+    if let Err(e) = force_activate::force_app_to_foreground() {
+        // 오류 로깅
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&activation_log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 테스트 활성화 오류: {}", 
+                chrono::Local::now().format("%H:%M:%S"), e);
+        }
+        return Err(e);
+    }
     
     // 성공 로그
     if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -1304,6 +1330,17 @@ pub fn test_force_activate() -> Result<(), String> {
         .open(&log_path) {
         use std::io::Write;
         let _ = writeln!(file, "[{}] test_force_activate 명령 성공", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
+    
+    // 활성화 로그 완료
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&activation_log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] === 테스트 강제 활성화 완료 ===", 
             chrono::Local::now().format("%H:%M:%S"));
     }
     
@@ -1328,13 +1365,6 @@ pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String
     // 앱 강제 활성화 시도
     force_activate::force_app_to_foreground()?;
     
-    // 키워드를 임시 파일에 저장
-    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-    if let Ok(mut file) = std::fs::File::create(&keyword_path) {
-        use std::io::Write;
-        let _ = write!(file, "{}", keyword);
-    }
-    
     // Window 찾아서 search-keyword 이벤트 발생
     if let Some(window) = app.get_webview_window("main") {
         use tauri::Emitter;
@@ -1352,90 +1382,67 @@ pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String
             chrono::Local::now().format("%H:%M:%S"));
     }
     
-    Ok(());
+    Ok(())
 }
-        "windows" => {
-            let appdata = app
-                .path()
-                .app_data_dir()
-                .map_err(|e| format!("Failed to get AppData directory: {}", e))?;
-            appdata.parent().unwrap_or(&appdata).join("Claude")
-        }
-        _ => {
-            return Err("Currently only supported on Windows".to_string());
-        }
-    };
 
-    // Configuration file paths
-    let claude_config_path = claude_dir.join("claude_desktop_config.json");
-    let mcplink_config_path = claude_dir.join("mcplink_desktop_config.json");
-
-    // 1. Process claude_desktop_config.json
-    if claude_config_path.exists() {
-        // Read configuration file
-        let config_str = fs::read_to_string(&claude_config_path)
-            .map_err(|e| format!("Failed to read claude config file: {}", e))?;
-
-        // Parse configuration
-        let mut config_value: Value = serde_json::from_str(&config_str)
-            .map_err(|e| format!("Failed to parse claude config file: {}", e))?;
-            
-        // Use general Value for more precise control
-        if let Value::Object(ref mut obj) = config_value {
-            // Find and process mcpServers (uppercase version)
-            if let Some(Value::Object(ref mut servers_map)) = obj.get_mut("mcpServers") {                
-                // Find fallback server
-                let fallback_server = servers_map.remove("McpFallbackServer")
-                    .or_else(|| servers_map.remove("MCPlink"));
-                
-                // Initialize map (remove all keys)
-                servers_map.clear();
-                
-                // If fallback server existed, add it back
-                if let Some(fallback) = fallback_server {
-                    servers_map.insert(String::from("McpFallbackServer"), fallback);
-                }
-            }
-            
-            // If lowercase mcp_servers value exists, remove it (to prevent creation)
-            obj.remove("mcp_servers");
-        }
+// 알림 클릭 시뮬레이션 함수 (알림 클릭 테스트용)
+#[tauri::command]
+pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<(), String> {
+    // 디버그 로그 파일에 기록
+    let log_path = std::env::temp_dir().join("mcplink_test.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] simulate_notification_click 명령 호출됨: {}", 
+            chrono::Local::now().format("%H:%M:%S"), keyword);
+    }
+    
+    // 알림 클릭 로그 파일 경로
+    let click_log_path = std::env::temp_dir().join("mcplink_notification_click.log");
+    
+    // 알림 클릭 시뮬레이션 로그 기록
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&click_log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] 알림 클릭 시뮬레이션: {}", 
+            chrono::Local::now().format("%H:%M:%S"), keyword);
+    }
+    
+    // 키워드를 임시 파일에 저장 (감시 스레드에서 처리하도록)
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+    if let Ok(mut file) = std::fs::File::create(&keyword_path) {
+        use std::io::Write;
+        let _ = write!(file, "{}", keyword);
         
-        // Convert value back to ClaudeDesktopConfig
-        let config: ClaudeDesktopConfig = serde_json::from_value(config_value)
-            .map_err(|e| format!("Failed to convert value back to config: {}", e))?;
-
-        // Write modified configuration to file
-        let config_json = serde_json::to_string_pretty(&config)
-            .map_err(|e| format!("Failed to serialize claude config: {}", e))?;
-
-        fs::write(&claude_config_path, config_json)
-            .map_err(|e| format!("Failed to write claude config file: {}", e))?;
-    }
-
-    // 2. Process mcplink_desktop_config.json
-    if mcplink_config_path.exists() {
-        // Read configuration file
-        let mcplink_str = fs::read_to_string(&mcplink_config_path)
-            .map_err(|e| format!("Failed to read mcplink config file: {}", e))?;
-
-        // Parse configuration
-        let mcplink_config: Map<String, Value> = serde_json::from_str(&mcplink_str)
-            .map_err(|e| format!("Failed to parse mcplink config file: {}", e))?;
-
-        // Create a new map that only keeps the fallback server with ID -1
-        let mut new_mcplink_config = Map::new();
-        if let Some(fallback_value) = mcplink_config.get("-1") {
-            new_mcplink_config.insert("-1".to_string(), fallback_value.clone());
+        // 로그 파일에 기록
+        if let Ok(mut log_file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&click_log_path) {
+            use std::io::Write;
+            let _ = writeln!(log_file, "[{}] 알림 클릭 처리: 키워드 파일 생성됨 (작업 ID: {})", 
+                chrono::Local::now().format("%H:%M:%S"), 
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
         }
-
-        // Write modified configuration to file
-        let mcplink_json = serde_json::to_string_pretty(&new_mcplink_config)
-            .map_err(|e| format!("Failed to serialize mcplink config: {}", e))?;
-
-        fs::write(&mcplink_config_path, mcplink_json)
-            .map_err(|e| format!("Failed to write mcplink config file: {}", e))?;
     }
-
+    
+    // 성공 로그
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] simulate_notification_click 명령 성공", 
+            chrono::Local::now().format("%H:%M:%S"));
+    }
+    
     Ok(())
 }
