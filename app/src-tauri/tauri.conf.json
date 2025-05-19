@@ -38,7 +38,13 @@
     "deep-link": {
       "desktop": {
         "schemes": ["mcplink"]
-      }
+      },
+      "domains": ["mcplink.app", "mcplink"]
+    },
+    "http": {
+      "all": true,
+      "request": true,
+      "scope": ["https://**", "http://**", "file://**"]
     }
   },
   "bundle": {

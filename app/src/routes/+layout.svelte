@@ -39,6 +39,8 @@
   let unlistenNavigateTo: UnlistenFn | undefined
   let unlistenConfigFiles: UnlistenFn | undefined
   let unlistenFocusChange: UnlistenFn | undefined
+  let unlistenSearchKeyword: UnlistenFn | undefined // 새로운 search-keyword-event 리스너를 위한 변수
+  let unlistenSearchKeywordEvent: UnlistenFn | undefined // search-keyword 이벤트 리스너 추가
 
   // --- Svelte reactive state ---
   let activeTabPath = "/"
@@ -49,108 +51,136 @@
   // Handles notification clicks or automatic activation events
   async function handleAppActivated() {
     try {
+      console.log("[FRONTEND] handleAppActivated called") // 로그 추가
 
-      
       // Check for pending keywords from the backend and handle window activation
-      const response = await invoke<string | null>("check_and_mark_app_activated", {});
+      console.log("[FRONTEND] Invoking 'check_and_mark_app_activated'") // 로그 추가
+      const response = await invoke<any>("check_and_mark_app_activated", {}) // 타입을 any로 변경 또는 구체적인 타입 지정
+      console.log("[FRONTEND] 'check_and_mark_app_activated' response:", response) // 로그 추가
 
-      
       // Extract keyword from the response
-      let keyword = null;
-      
+      let keyword = null
+
       // Handle differently based on data type (to accommodate various ways Rust's Option<String> is converted to JSON)
-      if (response && typeof response === 'object') {
-        if (response.hasOwnProperty('Some')) {
+      if (response && typeof response === "object") {
+        if (Object.prototype.hasOwnProperty.call(response, "Some")) {
+          // 안전한 접근으로 변경
           // Handle Rust's Option<String>::Some
-          keyword = response.Some;
-        } else if (response.hasOwnProperty('0')) {
+          keyword = (response as { Some: string | null }).Some // 타입 단언 추가
+        } else if (Object.prototype.hasOwnProperty.call(response, "0")) {
+          // 안전한 접근으로 변경
           // Handle if converted to an array
-          keyword = response[0];
+          keyword = (response as Array<string | null>)[0] // 타입 단언 추가
         }
-      } else if (response && typeof response === 'string' && response.trim() !== "") {
+      } else if (response && typeof response === "string" && response.trim() !== "") {
         // If converted directly to a string
-        keyword = response;
+        keyword = response
       }
 
-      
-      // If a keyword exists, navigate to the MCP list page
       if (keyword) {
-        
-        // Additional action to ensure the app is actually activated
-        if (tauriWindow) {
-          // Also attempt to activate the window from the frontend (additional check after backend activation)
-          try {
-            await tauriWindow.show();
-            await tauriWindow.unminimize();
-            await tauriWindow.setFocus();
-            
-            // Add a short delay to ensure the window is definitely visible
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } catch (e) {
-            console.error("[Notification] Frontend window activation failed:", e);
-          }
-        }
-        
-        // URL encode the keyword to include it as a query parameter
-        const targetUrl = `/MCP-list?keyword=${encodeURIComponent(keyword)}`;
-
-        
-        // Page navigation (goto is client-side routing between pages)
-        try {
-          
-          // 1. First, switch URL and update state
-          activeTabPath = "/MCP-list";
-          
-          // 2. Attempt to activate the app even if the window is already visible
-          if (tauriWindow) {
-            try {
-              // Additional attempt to bring window focus
-              await tauriWindow.show();
-              await tauriWindow.setFocus();
-              
-              // Bring the window to the top using always-on-top setting
-              await tauriWindow.setAlwaysOnTop(true);
-              
-              // Disable always-on-top after 5 seconds (to allow user to use other windows)
-              setTimeout(async () => {
-                try {
-                  await tauriWindow.setAlwaysOnTop(false);
-
-                } catch (e) {
-                  console.error("[Notification] Error removing always-on-top:", e);
-                }
-              }, 5000);
-            } catch (e) {
-              console.error("[Notification] Frontend focus error:", e);
-            }
-          }
-          
-          // 3. Handle uniformly whether URL navigation succeeds or fails
-          await Promise.race([
-            goto(targetUrl, {
-              replaceState: true,    // Replace the current URL
-              invalidateAll: true,   // Reload all data
-              noScroll: false        // Scroll to the top of the page
-            }),
-            // 1-second timeout (proceed even if navigation fails)
-            new Promise(resolve => setTimeout(resolve, 1000))
-          ]);
-          
-          // 4. Attempt to reactivate window regardless of page navigation
-          if (tauriWindow) {
-            await tauriWindow.setFocus();
-          }
-          
-        } catch (err) {
-          console.error("[Notification] Navigation error:", err);
-          
-          // Attempt to force a path change even if an error occurs
-          window.location.href = targetUrl;
-        }
+        console.log(`[FRONTEND] Keyword found: "${keyword}". Preparing to navigate.`) // 로그 추가
+        // 키워드가 있으면 검색 실행 함수 호출
+        handleKeywordSearch(keyword)
       } else {
+        console.log("[FRONTEND] No keyword found in 'check_and_mark_app_activated' response.") // 로그 추가
       }
     } catch (err) {
-      console.error("[Notification] Error in app activation handler:", err);
+      console.error("[FRONTEND][Notification] Error in app activation handler:", err)
+    }
+  }
+
+  // 검색 키워드 처리 함수 분리
+  async function handleKeywordSearch(keyword: string) {
+    if (!keyword || typeof keyword !== "string" || !keyword.trim()) {
+      console.log("[FRONTEND] Invalid keyword:", keyword)
+      return
+    }
+
+    try {
+      console.log(`[FRONTEND] Processing keyword: "${keyword}"`) // 로그 추가
+
+      // Additional action to ensure the app is actually activated
+      if (tauriWindow) {
+        // Also attempt to activate the window from the frontend (additional check after backend activation)
+        try {
+          console.log("[FRONTEND] Attempting frontend window activation (show, unminimize, setFocus)") // 로그 추가
+          await tauriWindow.show()
+          await tauriWindow.unminimize()
+          await tauriWindow.setFocus()
+
+          // Add a short delay to ensure the window is definitely visible
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          console.log("[FRONTEND] Frontend window activation successful.") // 로그 추가
+        } catch (e) {
+          console.error("[FRONTEND][Notification] Frontend window activation failed:", e)
+        }
+      }
+
+      // URL encode the keyword to include it as a query parameter
+      const targetUrl = `/MCP-list?keyword=${encodeURIComponent(keyword)}`
+      console.log(`[FRONTEND] Target URL with keyword: ${targetUrl}`) // 로그 추가
+
+      // Page navigation (goto is client-side routing between pages)
+      try {
+        console.log("[FRONTEND] activeTabPath set to /MCP-list") // 로그 추가
+        // 1. First, switch URL and update state
+        activeTabPath = "/MCP-list"
+
+        // 2. Attempt to activate the app even if the window is already visible
+        if (tauriWindow) {
+          try {
+            console.log("[FRONTEND] Additional attempt to bring window focus (show, setFocus, setAlwaysOnTop)") // 로그 추가
+            // Additional attempt to bring window focus
+            await tauriWindow.show()
+            await tauriWindow.setFocus()
+
+            // Bring the window to the top using always-on-top setting
+            await tauriWindow.setAlwaysOnTop(true)
+
+            // Disable always-on-top after 5 seconds (to allow user to use other windows)
+            setTimeout(async () => {
+              try {
+                if (tauriWindow) {
+                  // Null 체크 추가
+                  await tauriWindow.setAlwaysOnTop(false)
+                  console.log("[FRONTEND] Removed always-on-top.") // 로그 추가
+                }
+              } catch (e) {
+                console.error("[FRONTEND][Notification] Error removing always-on-top:", e)
+              }
+            }, 5000)
+          } catch (e) {
+            console.error("[FRONTEND][Notification] Frontend focus error:", e)
+          }
+        }
+
+        // 3. Handle uniformly whether URL navigation succeeds or fails
+        console.log(`[FRONTEND] Attempting navigation to: ${targetUrl}`) // 로그 추가
+        await Promise.race([
+          goto(targetUrl, {
+            replaceState: true, // Replace the current URL
+            invalidateAll: true, // Reload all data
+            noScroll: false, // Scroll to the top of the page
+          }),
+          // 1-second timeout (proceed even if navigation fails)
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ])
+
+        // 4. Attempt to reactivate window regardless of page navigation
+        if (tauriWindow) {
+          await tauriWindow.setFocus()
+          console.log("[FRONTEND] Final attempt to setFocus after navigation/timeout.") // 로그 추가
+        }
+        console.log("[FRONTEND] Navigation process completed.") // 로그 추가
+      } catch (err) {
+        console.error("[FRONTEND][Notification] Navigation error:", err)
+
+        // Attempt to force a path change even if an error occurs
+        console.log(`[FRONTEND] Forcing page reload to: ${targetUrl} due to navigation error.`) // 로그 추가
+        window.location.href = targetUrl
+      }
+    } catch (err) {
+      console.error("[FRONTEND] Error processing keyword:", err)
     }
   }
 
@@ -158,19 +188,34 @@
   onMount(async () => {
     // 개선된 토스트 시스템 초기화
     if (browser) {
-      initToastSystem();
-      
+      initToastSystem()
+
       // URI 스킴 프로토콜 핸들러는 deep-link 플러그인으로 대체됨
       // 이벤트 리스너로 처리하는 방식으로 변경
-      
+      console.log("[FRONTEND] Setting up 'search-keyword-event' listener.") // 로그 추가
+      unlistenSearchKeyword = await listen("search-keyword-event", async (event) => {
+        const keyword = event.payload as string
+        console.log(`[FRONTEND] Received 'search-keyword-event' with keyword: "${keyword}" (via direct listen)`)
+        await handleKeywordSearch(keyword)
+      })
+
+      // 'search-keyword' 이벤트 리스너 추가
+      console.log("[FRONTEND] Setting up 'search-keyword' listener.") // 로그 추가
+      unlistenSearchKeywordEvent = await listen("search-keyword", async (event) => {
+        const keyword = event.payload as string
+        console.log(`[FRONTEND] Received 'search-keyword' with keyword: "${keyword}"`)
+        await handleKeywordSearch(keyword)
+      })
+      console.log("[FRONTEND] 'search-keyword' listener setup complete.") // 로그 추가
+
       // 테스트 토스트 알림 (개발 환경에서만)
       if (import.meta.env.DEV) {
         setTimeout(() => {
           showToast("토스트 시스템이 성공적으로 초기화되었습니다.", {
             title: "알림 시스템 초기화",
-            type: "success"
-          });
-        }, 1000);
+            type: "success",
+          })
+        }, 1000)
       }
     }
     activeTabPath = $page.url.pathname
@@ -183,22 +228,22 @@
           // Check if config files exist on startup
           try {
             // Check claude_desktop_config.json
-            const claudeConfigExists = await invoke<boolean>("check_claude_config_exists");
-            
+            const claudeConfigExists = await invoke<boolean>("check_claude_config_exists")
+
             // Check mcplink_desktop_config.json
-            const mcplinkConfigExists = await invoke<boolean>("check_mcplink_config_exists");
-            
+            const mcplinkConfigExists = await invoke<boolean>("check_mcplink_config_exists")
+
             // Get current path
-            const currentPath = $page?.url?.pathname;
-            
+            const currentPath = $page?.url?.pathname
+
             // If any config file is missing and not already on first-install page
             if ((!claudeConfigExists || !mcplinkConfigExists) && currentPath !== "/first-install") {
-              await goto("/first-install", { replaceState: true });
-              return;
+              await goto("/first-install", { replaceState: true })
+              return
             } else if (claudeConfigExists && mcplinkConfigExists && currentPath === "/first-install") {
               // If all config files exist but we're on first-install page, redirect to main page
-              await goto("/Installed-MCP", { replaceState: true });
-              return;
+              await goto("/Installed-MCP", { replaceState: true })
+              return
             }
           } catch (error) {
             // Error checking config files
@@ -213,63 +258,64 @@
     if (typeof window !== "undefined" && "__TAURI__" in window) {
       try {
         tauriWindow = WebviewWindow.getCurrent()
-        
+        console.log("[FRONTEND] Tauri window object obtained.", tauriWindow) // 로그 추가
+
         // Set up event listeners
         unlistenMoveToCenter = await listen("move-main-to-center", async () => {
           // This event should not be triggered anymore
           // We no longer automatically center the window
-          console.log("move-main-to-center event received but ignored to prevent auto-centering");
+          console.log("move-main-to-center event received but ignored to prevent auto-centering")
         })
-        
+
         unlistenNavigateTo = await listen("navigate-to", async (event) => {
           if (event.payload && typeof event.payload === "string") goto(event.payload as string)
         })
-        
+
         // Focus event listener that completely ignores all focus events
         // This prevents the window from auto-centering when focused
-        const windowEventUnlistener = await tauriWindow.onFocusChanged(({ payload: focused }) => {
-          // Simply do nothing when window gains focus
+        const focusListener = await tauriWindow.onFocusChanged(async ({ payload: focused }) => {
           if (focused) {
-            console.log("Window focused event ignored to prevent auto-centering");
+            console.log("[FRONTEND] Window gained focus. Calling handleAppActivated.") // 로그 추가
+            await handleAppActivated()
+          } else {
+            console.log("[FRONTEND] Window lost focus.") // 로그 추가
           }
-        });
-        
+        })
+
         // Store unlisten function for cleanup in a variable for later use
-        if (windowEventUnlistener) {
-          unlistenFocusChange = windowEventUnlistener;
+        if (focusListener) {
+          unlistenFocusChange = focusListener
         }
-        
-        // Do NOT call handleAppActivated at start - this prevents auto-centering
-        // handleAppActivated();
-        
+
         // Start watching for config file changes
         try {
           // Start the config file watcher in the backend
-          await invoke("start_config_watch");
-          
+          await invoke("start_config_watch")
+
           // Listen for config files missing events
           unlistenConfigFiles = await listen("config-files-missing", async (event) => {
             try {
               // Get the current path and ignore if already on first-install page
-              const currentPath = $page?.url?.pathname;
-              if (currentPath === "/first-install") return;
-              
+              const currentPath = $page?.url?.pathname
+              if (currentPath === "/first-install") return
+
               // Extract which files are missing from the event payload
-              const { claudeConfigExists, mcplinkConfigExists } = event.payload;
-              
+              const payload = event.payload as { claudeConfigExists?: boolean; mcplinkConfigExists?: boolean } // 타입 단언 추가
+              const { claudeConfigExists, mcplinkConfigExists } = payload
+
               // If any config file is missing, redirect to first-install page
-              if (!claudeConfigExists || !mcplinkConfigExists) {
-                console.log("[Config Watch] Configuration files missing, redirecting to first-install");
-                await goto("/first-install", { replaceState: true });
+              if (claudeConfigExists === false || mcplinkConfigExists === false) {
+                // 명시적으로 false 비교
+                console.log("[Config Watch] Configuration files missing, redirecting to first-install")
+                await goto("/first-install", { replaceState: true })
               }
             } catch (error) {
-              console.error("[Config Watch] Failed to handle config files event:", error);
+              console.error("[Config Watch] Failed to handle config files event:", error)
             }
-          });
+          })
         } catch (error) {
-          console.error("[Config Watch] Failed to start config watch:", error);
+          console.error("[Config Watch] Failed to start config watch:", error)
         }
-        
       } catch (error) {
         console.error("[Layout] Error during Tauri initialization:", error)
       }
@@ -283,11 +329,14 @@
   // Clean up all event listeners on component destruction
   onDestroy(() => {
     // Clean up Tauri event listeners
-    if (unlistenMoveToCenter) unlistenMoveToCenter();
-    if (unlistenNavigateTo) unlistenNavigateTo();
-    if (unlistenConfigFiles) unlistenConfigFiles();
-    if (unlistenFocusChange) unlistenFocusChange();
-  });
+    if (unlistenMoveToCenter) unlistenMoveToCenter()
+    if (unlistenNavigateTo) unlistenNavigateTo()
+    if (unlistenConfigFiles) unlistenConfigFiles()
+    if (unlistenFocusChange) unlistenFocusChange()
+    if (unlistenSearchKeyword) unlistenSearchKeyword() // 리스너 해제
+    if (unlistenSearchKeywordEvent) unlistenSearchKeywordEvent() // 리스너 해제
+    console.log("[FRONTEND] Event listeners cleaned up on destroy.") // 로그 추가
+  })
 
   // --- Window control functions ---
   async function minimizeWindow() {
@@ -388,15 +437,9 @@
   >
     <slot />
   </main>
-  
+
   <!-- Global Toast Notifications -->
-  <Toast 
-    bind:show={$toastStore.show}
-    message={$toastStore.message}
-    type={$toastStore.type}
-    duration={$toastStore.duration}
-    position={$toastStore.position}
-  />
+  <Toast bind:show={$toastStore.show} message={$toastStore.message} type={$toastStore.type} duration={$toastStore.duration} position={$toastStore.position} />
 </div>
 
 <style>
@@ -410,17 +453,17 @@
     width: 8px;
     height: 8px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
     margin-top: 8px; /* Add some space at the top to prevent overlap with tabs */
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background: #888;
     border-radius: 4px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #555;
   }

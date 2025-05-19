@@ -1,5 +1,6 @@
 // app/src-tauri/src/commands.rs
 
+use crate::force_activate;
 use dotenvy::dotenv; // Used to load .env at runtime in development mode
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -7,10 +8,9 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
 use std::{env, fs, path::PathBuf, process::Command as StdCommand}; // env added for accessing environment variables at runtime
-use tauri::{AppHandle, Manager, State, Emitter};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::time::{sleep, Duration};
 use urlencoding::encode;
-use crate::force_activate;
 
 // --- Existing struct definitions (McpServerInfo, ApiCardData, PageInfo, DataWrapper, ApiResponse) ---
 #[derive(Debug, Deserialize)]
@@ -88,7 +88,6 @@ pub struct MCPCardResponse {
     pub page_info: PageInfoResponse,
 }
 
-
 // DetailApiResponse is now designed to parse the object obtained from `api_response_wrapper.data.get("mcpServer")`
 #[derive(Debug, Deserialize)]
 struct DetailApiResponse {
@@ -154,12 +153,14 @@ pub async fn get_mcp_data(
         env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| String::new())
     } else {
         // Deployment mode: include the value from .env file at compile time
-        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| include_str!("../../.env")
-            .lines()
-            .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
-            .and_then(|line| line.split('=').nth(1))
-            .unwrap_or("")
-            .to_string())
+        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| {
+            include_str!("../../.env")
+                .lines()
+                .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
+                .and_then(|line| line.split('=').nth(1))
+                .unwrap_or("")
+                .to_string()
+        })
     };
 
     // Add cursor ID to URL configuration
@@ -294,12 +295,14 @@ pub async fn get_mcp_detail_data(
         env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| String::new())
     } else {
         // Deployment mode: include the value from .env file at compile time
-        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| include_str!("../../.env")
-            .lines()
-            .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
-            .and_then(|line| line.split('=').nth(1))
-            .unwrap_or("")
-            .to_string())
+        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| {
+            include_str!("../../.env")
+                .lines()
+                .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
+                .and_then(|line| line.split('=').nth(1))
+                .unwrap_or("")
+                .to_string()
+        })
     };
     let request_url = format!("{}/{}", base_url, id);
 
@@ -655,12 +658,14 @@ pub async fn get_installed_mcp_data(
         env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| String::new())
     } else {
         // Deployment mode: include the value from .env file at compile time
-        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| include_str!("../../.env")
-            .lines()
-            .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
-            .and_then(|line| line.split('=').nth(1))
-            .unwrap_or("")
-            .to_string())
+        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| {
+            include_str!("../../.env")
+                .lines()
+                .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
+                .and_then(|line| line.split('=').nth(1))
+                .unwrap_or("")
+                .to_string()
+        })
     };
 
     // Use the batch endpoint
@@ -942,7 +947,6 @@ pub fn read_mcplink_config_content(app: AppHandle) -> Result<String, String> {
         .map_err(|e| format!("Failed to read mcplink_desktop_config.json: {}", e))
 }
 
-
 // --- Modified function to check config file existence ---
 
 #[tauri::command]
@@ -988,66 +992,82 @@ pub async fn ensure_config_files(app: AppHandle) -> Result<(), String> {
     // Load .env file in development mode (ignored if already loaded)
     #[cfg(debug_assertions)]
     let _ = dotenv();
-    
+
     // Get environment variables at runtime
     let crawler_api_base_url = if cfg!(debug_assertions) {
         // Development mode: get from environment variable
         env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| String::new())
     } else {
         // Deployment mode: include the value from .env file at compile time
-        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| include_str!("../../.env")
-            .lines()
-            .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
-            .and_then(|line| line.split('=').nth(1))
-            .unwrap_or("")
-            .to_string())
+        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| {
+            include_str!("../../.env")
+                .lines()
+                .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
+                .and_then(|line| line.split('=').nth(1))
+                .unwrap_or("")
+                .to_string()
+        })
     };
-    
+
     let gui_be_api_base_url = if cfg!(debug_assertions) {
         // Development mode: get from environment variable
         env::var("GUI_BE_API_BASE_URL").unwrap_or_else(|_| String::new())
     } else {
         // Deployment mode: include the value from .env file at compile time
-        env::var("GUI_BE_API_BASE_URL").unwrap_or_else(|_| include_str!("../../.env")
-            .lines()
-            .find(|line| line.starts_with("GUI_BE_API_BASE_URL="))
-            .and_then(|line| line.split('=').nth(1))
-            .unwrap_or("")
-            .to_string())
+        env::var("GUI_BE_API_BASE_URL").unwrap_or_else(|_| {
+            include_str!("../../.env")
+                .lines()
+                .find(|line| line.starts_with("GUI_BE_API_BASE_URL="))
+                .and_then(|line| line.split('=').nth(1))
+                .unwrap_or("")
+                .to_string()
+        })
     };
-    
+
     // Check if config files exist
     let claude_config_exists = check_claude_config_exists(app.clone())?;
     let mcplink_config_exists = check_mcplink_config_exists(app.clone())?;
-    
+
     // Only create missing files if needed
     if !claude_config_exists || !mcplink_config_exists {
         // Set up fallback server
         let server_name = "McpFallbackServer";
-        
+
         // Create environment variables map
         let mut env_map = Map::new();
-        
+
         // Add environment variables only if they exist
         if !crawler_api_base_url.is_empty() {
-            env_map.insert("CRAWLER_API_BASE_URL".to_string(), Value::String(crawler_api_base_url));
+            env_map.insert(
+                "CRAWLER_API_BASE_URL".to_string(),
+                Value::String(crawler_api_base_url),
+            );
         }
         if !gui_be_api_base_url.is_empty() {
-            env_map.insert("GUI_BE_API_BASE_URL".to_string(), Value::String(gui_be_api_base_url));
+            env_map.insert(
+                "GUI_BE_API_BASE_URL".to_string(),
+                Value::String(gui_be_api_base_url),
+            );
         }
-        env_map.insert("NODE_ENV".to_string(), Value::String("development".to_string()));
-        
+        env_map.insert(
+            "NODE_ENV".to_string(),
+            Value::String("development".to_string()),
+        );
+
         let server_config = MCPServerConfig {
             command: "node".to_string(),
-            args: Some(vec!["C:\\Users\\SSAFY\\Desktop\\0516\\S12P31A201\\mcp-server\\dist\\main.js".to_string()]),
+            args: Some(vec![
+                "C:\\Users\\SSAFY\\Desktop\\0516\\S12P31A201\\mcp-server\\dist\\main.js"
+                    .to_string(),
+            ]),
             cwd: Some("C:\\Users\\SSAFY\\Desktop\\0516\\S12P31A201\\mcp-server".to_string()),
             env: Some(env_map),
         };
-        
+
         // Add the configuration - this will create both config files
         add_mcp_server_config(app, server_name.to_string(), server_config, -1).await?
     }
-    
+
     Ok(())
 }
 
@@ -1057,15 +1077,15 @@ pub async fn ensure_config_files(app: AppHandle) -> Result<(), String> {
 pub async fn start_config_watch(app: AppHandle) -> Result<(), String> {
     // We'll use a background task to periodically check the config files
     let app_handle = app.clone();
-    
+
     // Start a task that runs in the background
     tauri::async_runtime::spawn(async move {
         // Check every 3 seconds for config files
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
-        
+
         loop {
             interval.tick().await; // Wait for the next interval
-            
+
             // Check if config files exist
             match check_claude_config_exists(app_handle.clone()) {
                 Ok(claude_exists) => {
@@ -1078,21 +1098,24 @@ pub async fn start_config_watch(app: AppHandle) -> Result<(), String> {
                                 if let Some(window) = app_handle.get_webview_window("main") {
                                     // Emit the event with the specific status of each file
                                     // Using Emitter trait which is now in scope
-                                    let _ = window.emit("config-files-missing", json!({
-                                        "claudeConfigExists": claude_exists,
-                                        "mcplinkConfigExists": mcplink_exists
-                                    }));
+                                    let _ = window.emit(
+                                        "config-files-missing",
+                                        json!({
+                                            "claudeConfigExists": claude_exists,
+                                            "mcplinkConfigExists": mcplink_exists
+                                        }),
+                                    );
                                 }
                             }
-                        },
+                        }
                         Err(e) => eprintln!("Error checking mcplink config: {}", e),
                     }
-                },
+                }
                 Err(e) => eprintln!("Error checking claude config: {}", e),
             }
         }
     });
-    
+
     Ok(())
 }
 
@@ -1184,8 +1207,6 @@ pub fn is_mcp_server_installed(app: AppHandle, server_name: String) -> Result<bo
     Ok(servers.contains_key(&server_name))
 }
 
-
-
 /// Function to reset MCP settings (excluding fallback server)
 #[tauri::command]
 pub fn reset_mcp_settings(app: AppHandle) -> Result<(), String> {
@@ -1217,28 +1238,29 @@ pub fn reset_mcp_settings(app: AppHandle) -> Result<(), String> {
         // Parse configuration
         let mut config_value: Value = serde_json::from_str(&config_str)
             .map_err(|e| format!("Failed to parse claude config file: {}", e))?;
-            
+
         // Use general Value for more precise control
         if let Value::Object(ref mut obj) = config_value {
             // Find and process mcpServers (uppercase version)
-            if let Some(Value::Object(ref mut servers_map)) = obj.get_mut("mcpServers") {                
+            if let Some(Value::Object(ref mut servers_map)) = obj.get_mut("mcpServers") {
                 // Find fallback server
-                let fallback_server = servers_map.remove("McpFallbackServer")
+                let fallback_server = servers_map
+                    .remove("McpFallbackServer")
                     .or_else(|| servers_map.remove("MCPlink"));
-                
+
                 // Initialize map (remove all keys)
                 servers_map.clear();
-                
+
                 // If fallback server existed, add it back
                 if let Some(fallback) = fallback_server {
                     servers_map.insert(String::from("McpFallbackServer"), fallback);
                 }
             }
-            
+
             // If lowercase mcp_servers value exists, remove it (to prevent creation)
             obj.remove("mcp_servers");
         }
-        
+
         // Convert value back to ClaudeDesktopConfig
         let config: ClaudeDesktopConfig = serde_json::from_value(config_value)
             .map_err(|e| format!("Failed to convert value back to config: {}", e))?;
@@ -1287,26 +1309,34 @@ pub fn test_force_activate() -> Result<(), String> {
         .create(true)
         .write(true)
         .append(true)
-        .open(&log_path) {
+        .open(&log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] test_force_activate 명령 호출됨", 
-            chrono::Local::now().format("%H:%M:%S"));
+        let _ = writeln!(
+            file,
+            "[{}] test_force_activate 명령 호출됨",
+            chrono::Local::now().format("%H:%M:%S")
+        );
     }
-    
+
     // 활성화 로그 파일 경로
     let activation_log_path = std::env::temp_dir().join("mcplink_activation.log");
-    
+
     // 활성화 로그 초기화
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open(&activation_log_path) {
+        .open(&activation_log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] === 테스트 강제 활성화 시작 ===", 
-            chrono::Local::now().format("%H:%M:%S"));
+        let _ = writeln!(
+            file,
+            "[{}] === 테스트 강제 활성화 시작 ===",
+            chrono::Local::now().format("%H:%M:%S")
+        );
     }
-    
+
     // 앱 강제 활성화 시도
     if let Err(e) = force_activate::force_app_to_foreground() {
         // 오류 로깅
@@ -1314,36 +1344,49 @@ pub fn test_force_activate() -> Result<(), String> {
             .create(true)
             .write(true)
             .append(true)
-            .open(&activation_log_path) {
+            .open(&activation_log_path)
+        {
             use std::io::Write;
-            let _ = writeln!(file, "[{}] 테스트 활성화 오류: {}", 
-                chrono::Local::now().format("%H:%M:%S"), e);
+            let _ = writeln!(
+                file,
+                "[{}] 테스트 활성화 오류: {}",
+                chrono::Local::now().format("%H:%M:%S"),
+                e
+            );
         }
         return Err(e);
     }
-    
+
     // 성공 로그
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open(&log_path) {
+        .open(&log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] test_force_activate 명령 성공", 
-            chrono::Local::now().format("%H:%M:%S"));
+        let _ = writeln!(
+            file,
+            "[{}] test_force_activate 명령 성공",
+            chrono::Local::now().format("%H:%M:%S")
+        );
     }
-    
+
     // 활성화 로그 완료
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open(&activation_log_path) {
+        .open(&activation_log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] === 테스트 강제 활성화 완료 ===", 
-            chrono::Local::now().format("%H:%M:%S"));
+        let _ = writeln!(
+            file,
+            "[{}] === 테스트 강제 활성화 완료 ===",
+            chrono::Local::now().format("%H:%M:%S")
+        );
     }
-    
+
     Ok(())
 }
 
@@ -1356,32 +1399,41 @@ pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String
         .create(true)
         .write(true)
         .append(true)
-        .open(&log_path) {
+        .open(&log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] test_search_keyword 명령 호출됨: {}", 
-            chrono::Local::now().format("%H:%M:%S"), keyword);
+        let _ = writeln!(
+            file,
+            "[{}] test_search_keyword 명령 호출됨: {}",
+            chrono::Local::now().format("%H:%M:%S"),
+            keyword
+        );
     }
-    
+
     // 앱 강제 활성화 시도
     force_activate::force_app_to_foreground()?;
-    
+
     // Window 찾아서 search-keyword 이벤트 발생
     if let Some(window) = app.get_webview_window("main") {
         use tauri::Emitter;
         let _ = window.emit("search-keyword", keyword.clone());
     }
-    
+
     // 성공 로그
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open(&log_path) {
+        .open(&log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] test_search_keyword 명령 성공", 
-            chrono::Local::now().format("%H:%M:%S"));
+        let _ = writeln!(
+            file,
+            "[{}] test_search_keyword 명령 성공",
+            chrono::Local::now().format("%H:%M:%S")
+        );
     }
-    
+
     Ok(())
 }
 
@@ -1394,55 +1446,163 @@ pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<()
         .create(true)
         .write(true)
         .append(true)
-        .open(&log_path) {
+        .open(&log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] simulate_notification_click 명령 호출됨: {}", 
-            chrono::Local::now().format("%H:%M:%S"), keyword);
+        let _ = writeln!(
+            file,
+            "[{}] simulate_notification_click 명령 호출됨: {}",
+            chrono::Local::now().format("%H:%M:%S"),
+            keyword
+        );
     }
-    
+
     // 알림 클릭 로그 파일 경로
     let click_log_path = std::env::temp_dir().join("mcplink_notification_click.log");
-    
+
     // 알림 클릭 시뮬레이션 로그 기록
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open(&click_log_path) {
+        .open(&click_log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] 알림 클릭 시뮬레이션: {}", 
-            chrono::Local::now().format("%H:%M:%S"), keyword);
+        let _ = writeln!(
+            file,
+            "[{}] 알림 클릭 시뮬레이션: {}",
+            chrono::Local::now().format("%H:%M:%S"),
+            keyword
+        );
     }
-    
+
     // 키워드를 임시 파일에 저장 (감시 스레드에서 처리하도록)
     let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
     if let Ok(mut file) = std::fs::File::create(&keyword_path) {
         use std::io::Write;
         let _ = write!(file, "{}", keyword);
-        
+
         // 로그 파일에 기록
         if let Ok(mut log_file) = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
-            .open(&click_log_path) {
+            .open(&click_log_path)
+        {
             use std::io::Write;
-            let _ = writeln!(log_file, "[{}] 알림 클릭 처리: 키워드 파일 생성됨 (작업 ID: {})", 
-                chrono::Local::now().format("%H:%M:%S"), 
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+            let _ = writeln!(
+                log_file,
+                "[{}] 알림 클릭 처리: 키워드 파일 생성됨 (작업 ID: {})",
+                chrono::Local::now().format("%H:%M:%S"),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            );
         }
     }
-    
+
+    // 앱 강제 활성화 시도 - 결과에 관계없이 성공 반환 (감시 스레드가 처리할 것임)
+    let activation_result = force_activate::force_app_to_foreground();
+
+    // 활성화 시도 로그
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = writeln!(
+            file,
+            "[{}] simulate_notification_click: 앱 활성화 시도 결과: {}",
+            chrono::Local::now().format("%H:%M:%S"),
+            if activation_result.is_ok() {
+                "성공"
+            } else {
+                "알림 감시 스레드에서 처리 예정"
+            }
+        );
+    }
+
     // 성공 로그
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open(&log_path) {
+        .open(&log_path)
+    {
         use std::io::Write;
-        let _ = writeln!(file, "[{}] simulate_notification_click 명령 성공", 
-            chrono::Local::now().format("%H:%M:%S"));
+        let _ = writeln!(
+            file,
+            "[{}] simulate_notification_click 명령 성공",
+            chrono::Local::now().format("%H:%M:%S")
+        );
     }
-    
+
     Ok(())
+}
+
+// 앱 활성화 상태를 확인하고 키워드가 있으면 표시하는 함수
+#[tauri::command]
+pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, String> {
+    // 키워드 상태 확인
+    if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
+        // 키워드가 있으면 가져오기
+        if keyword_state.has_keyword() {
+            let keyword = keyword_state.take_keyword();
+
+            // 로그 파일에 기록
+            let log_path = std::env::temp_dir().join("mcplink_activation.log");
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&log_path)
+            {
+                use std::io::Write;
+                let _ = writeln!(
+                    file,
+                    "[{}] check_and_mark_app_activated: 키워드 발견: {:?}",
+                    chrono::Local::now().format("%H:%M:%S"),
+                    keyword
+                );
+            }
+
+            return Ok(keyword);
+        }
+    }
+
+    // 키워드 파일에서 직접 확인
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+    if keyword_path.exists() {
+        if let Ok(keyword) = std::fs::read_to_string(&keyword_path) {
+            if !keyword.is_empty() {
+                // 로그 파일에 기록
+                let log_path = std::env::temp_dir().join("mcplink_activation.log");
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    use std::io::Write;
+                    let _ = writeln!(
+                        file,
+                        "[{}] check_and_mark_app_activated: 파일에서 키워드 발견: {}",
+                        chrono::Local::now().format("%H:%M:%S"),
+                        keyword
+                    );
+                }
+
+                // 키워드 파일 삭제
+                let _ = std::fs::remove_file(&keyword_path);
+
+                return Ok(Some(keyword));
+            }
+        }
+    }
+
+    // 키워드가 없음
+    Ok(None)
 }
