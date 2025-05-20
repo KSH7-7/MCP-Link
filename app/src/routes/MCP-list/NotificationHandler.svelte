@@ -23,49 +23,53 @@
 
     console.log(`'${keyword}' 키워드로 검색 실행 중...`)
 
-    // 이미 같은 URL에 있는지 확인
-    const currentUrl = window.location.pathname + window.location.search
-    const targetUrl = `/MCP-list?keyword=${encodeURIComponent(keyword)}`
-
-    if (currentUrl === targetUrl) {
-      console.log(`이미 동일한 URL에 있습니다. 페이지 새로고침으로 대체`)
-      window.location.reload()
-      return
-    }
-
-    // URL 업데이트 - goto 대신 직접 location 사용
+    // URL 업데이트
     try {
-      console.log(`페이지 이동: ${targetUrl}`)
-
-      // 토스트 메시지 표시 (사용자 피드백)
-      try {
-        console.log("토스트 메시지 표시 중...")
-        const toastEvent = new CustomEvent("show-toast", {
-          detail: {
-            message: `'${keyword}' 키워드로 검색합니다`,
-            type: "info",
-            duration: 3000,
-          },
-        })
-        document.dispatchEvent(toastEvent)
-        console.log("토스트 이벤트 발송 완료")
-      } catch (e) {
-        console.error("Toast event error:", e)
-      }
-
-      // 키워드 저장 후 페이지 이동
-      console.log(`키워드 저장: '${keyword}'를 로컬 스토리지에 저장 (일시적)`)
-      localStorage.setItem("lastNotificationKeyword", keyword)
-
-      // 지연 후 리다이렉트
-      setTimeout(() => {
-        window.location.href = targetUrl
-      }, 100)
+      console.log(`페이지 이동: /MCP-list?keyword=${encodeURIComponent(keyword)}`)
+      goto(`/MCP-list?keyword=${encodeURIComponent(keyword)}`, { replaceState: false })
     } catch (e) {
       console.error("페이지 이동 오류:", e)
-      // 오류 발생 시 강제 이동
-      window.location.href = targetUrl
     }
+
+    // 토스트 메시지 표시 (사용자 피드백)
+    try {
+      console.log("토스트 메시지 표시 중...")
+      const toastEvent = new CustomEvent("show-toast", {
+        detail: {
+          message: `'${keyword}' 키워드로 검색합니다`,
+          type: "info",
+          duration: 3000,
+        },
+      })
+      document.dispatchEvent(toastEvent)
+      console.log("토스트 이벤트 발송 완료")
+    } catch (e) {
+      console.error("Toast event error:", e)
+    }
+
+    // 키워드 로컬 스토리지에 저장 (앱 다시 시작 시 사용)
+    // 중요: 현재 페이지가 이미 MCP-list이고 키워드가 URL에 있다면 저장하지 않음
+    // 이미 검색을 실행 중인 경우를 고려
+    if (window.location.pathname === "/MCP-list") {
+      const urlParams = new URLSearchParams(window.location.search)
+      const urlKeyword = urlParams.get("keyword")
+      if (urlKeyword === keyword) {
+        console.log(`키워드 '${keyword}'는 이미 URL에 있어 저장하지 않음`)
+        return
+      }
+    }
+
+    console.log(`키워드 저장: '${keyword}'를 로컬 스토리지에 저장 (일시적)`)
+    // 세션 스토리지에 저장 (현재 세션에서만 유효하도록)
+    sessionStorage.setItem("pendingSearchKeyword", keyword)
+
+    // 로컬 스토리지에도 백업으로 저장 (타임스탬프도 함께 저장)
+    const keywordData = {
+      keyword: keyword,
+      timestamp: Date.now(),
+      used: false,
+    }
+    localStorage.setItem("lastNotificationKeyword", keyword)
 
     console.log("executeSearch 함수 실행 완료")
   }
@@ -94,7 +98,7 @@
       })
 
       // navigate-to 이벤트 리스너 (기본 탐색용)
-      unlistenBasicNavigate = await listen("navigate-to", (event) => {
+      const unlistenBasicNavigate = await listen("navigate-to", (event) => {
         console.log("수신: navigate-to 이벤트", event)
         const payload = event.payload
 
@@ -112,7 +116,7 @@
           }
 
           // 키워드가 없으면 일반 탐색
-          window.location.href = payload
+          goto(payload)
         }
       })
 
@@ -189,7 +193,7 @@
       console.log("new-keywords 리스너 정리")
       unlistenKeywords()
     }
-    if (unlistenBasicNavigate) {
+    if (typeof unlistenBasicNavigate === "function") {
       console.log("navigate-to 리스너 정리")
       unlistenBasicNavigate()
     }

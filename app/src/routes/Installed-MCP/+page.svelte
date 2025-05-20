@@ -220,7 +220,7 @@
       </div>
     {:else if $installedServers.length > 0}
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {#each $installedServers as server, index (`${server.id}-${index}`)}
+        {#each $installedServers as server (server.id)}
           <MCPCardComponent id={server.id} title={server.title} description={server.description} url={server.url} stars={server.stars} mode="installed" on:deleted={handleCardDeleted} />
         {/each}
       </div>

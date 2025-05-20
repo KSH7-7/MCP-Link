@@ -9,6 +9,7 @@
   import { goto } from "$app/navigation"
   import { listen, type UnlistenFn } from "@tauri-apps/api/event"
   import { UserAttentionType } from "@tauri-apps/api/window"
+  import { platform as getOsPlatform } from "@tauri-apps/plugin-os"
   import { invoke } from "@tauri-apps/api/core"
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
   import Toast from "$lib/components/toast.svelte"
@@ -98,76 +99,88 @@
     try {
       console.log(`[FRONTEND] Processing keyword: "${keyword}"`) // 로그 추가
 
-      // 알림 클릭으로 갑자기 활성화될 때는 추가적인 지연 필요
-      // 창 시스템이 안정화될 시간을 제공 (Tauri v2.0에서 전체적인 타이밍 조정)
-      await new Promise((resolve) => setTimeout(resolve, 800))
-
-      // 이미 해당 URL에 있는지 확인
-      const currentUrl = window.location.pathname + window.location.search
-      const targetUrl = `/MCP-list?keyword=${encodeURIComponent(keyword)}`
-      console.log(`[FRONTEND] Current URL: ${currentUrl}, Target URL: ${targetUrl}`)
-
-      if (currentUrl === targetUrl) {
-        console.log(`[FRONTEND] Already at the target URL. Refreshing page instead.`)
-        // 이미 같은 URL에 있는 경우, 페이지 새로고침
-        window.location.reload()
-        return
-      }
-
-      // Tauri v2.0에서 WebviewWindow API 사용
+      // Additional action to ensure the app is actually activated
       if (tauriWindow) {
-        console.log("[FRONTEND] Window object available. Ensuring window visibility")
-
-        // 창이 최소화되어 있으면 복원
-        const isMinimized = await tauriWindow.isMinimized()
-        if (isMinimized) {
-          console.log("[FRONTEND] Window is minimized. Restoring...")
-          await tauriWindow.unminimize()
-          // 복원 후 약간의 지연 제공
-          await new Promise((resolve) => setTimeout(resolve, 200))
-        }
-
-        // 창이 보이지 않으면 표시
-        const isVisible = await tauriWindow.isVisible()
-        if (!isVisible) {
-          console.log("[FRONTEND] Window is not visible. Showing...")
+        // Also attempt to activate the window from the frontend (additional check after backend activation)
+        try {
+          console.log("[FRONTEND] Attempting frontend window activation (show, unminimize, setFocus)") // 로그 추가
           await tauriWindow.show()
-          // 표시 후 약간의 지연 제공
-          await new Promise((resolve) => setTimeout(resolve, 200))
+          await tauriWindow.unminimize()
+          await tauriWindow.setFocus()
+
+          // Add a short delay to ensure the window is definitely visible
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          console.log("[FRONTEND] Frontend window activation successful.") // 로그 추가
+        } catch (e) {
+          console.error("[FRONTEND][Notification] Frontend window activation failed:", e)
         }
-
-        // 최종 포커스 설정 (2번의 시도)
-        console.log("[FRONTEND] Setting window focus...")
-        await tauriWindow.setFocus()
-
-        // 추가 포커스 시도 (약간 지연 후)
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        await tauriWindow.setFocus()
       }
 
       // URL encode the keyword to include it as a query parameter
+      const targetUrl = `/MCP-list?keyword=${encodeURIComponent(keyword)}`
       console.log(`[FRONTEND] Target URL with keyword: ${targetUrl}`) // 로그 추가
 
-      // 1. activeTabPath 설정 (메뉴 하이라이팅용)
-      console.log("[FRONTEND] activeTabPath set to /MCP-list")
-      activeTabPath = "/MCP-list"
-
-      // 2. 페이지 이동 시도
+      // Page navigation (goto is client-side routing between pages)
       try {
-        // goto를 사용하는 경우 에러 캐치를 위한 래핑
-        console.log("[FRONTEND] Attempting navigation with goto...")
-        await goto(targetUrl, { replaceState: false })
-      } catch (navError) {
-        console.error("[FRONTEND] Navigation failed with goto. Using direct location change.", navError)
+        console.log("[FRONTEND] activeTabPath set to /MCP-list") // 로그 추가
+        // 1. First, switch URL and update state
+        activeTabPath = "/MCP-list"
 
-        // goto 실패 시 직접 location 변경 (대체 방법)
+        // 2. Attempt to activate the app even if the window is already visible
+        if (tauriWindow) {
+          try {
+            console.log("[FRONTEND] Additional attempt to bring window focus (show, setFocus, setAlwaysOnTop)") // 로그 추가
+            // Additional attempt to bring window focus
+            await tauriWindow.show()
+            await tauriWindow.setFocus()
+
+            // Bring the window to the top using always-on-top setting
+            await tauriWindow.setAlwaysOnTop(true)
+
+            // Disable always-on-top after 5 seconds (to allow user to use other windows)
+            setTimeout(async () => {
+              try {
+                if (tauriWindow) {
+                  // Null 체크 추가
+                  await tauriWindow.setAlwaysOnTop(false)
+                  console.log("[FRONTEND] Removed always-on-top.") // 로그 추가
+                }
+              } catch (e) {
+                console.error("[FRONTEND][Notification] Error removing always-on-top:", e)
+              }
+            }, 5000)
+          } catch (e) {
+            console.error("[FRONTEND][Notification] Frontend focus error:", e)
+          }
+        }
+
+        // 3. Handle uniformly whether URL navigation succeeds or fails
+        console.log(`[FRONTEND] Attempting navigation to: ${targetUrl}`) // 로그 추가
+        await Promise.race([
+          goto(targetUrl, {
+            replaceState: true, // Replace the current URL
+            invalidateAll: true, // Reload all data
+            noScroll: false, // Scroll to the top of the page
+          }),
+          // 1-second timeout (proceed even if navigation fails)
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ])
+
+        // 4. Attempt to reactivate window regardless of page navigation
+        if (tauriWindow) {
+          await tauriWindow.setFocus()
+          console.log("[FRONTEND] Final attempt to setFocus after navigation/timeout.") // 로그 추가
+        }
+        console.log("[FRONTEND] Navigation process completed.") // 로그 추가
+      } catch (err) {
+        console.error("[FRONTEND][Notification] Navigation error:", err)
+
+        // Attempt to force a path change even if an error occurs
+        console.log(`[FRONTEND] Forcing page reload to: ${targetUrl} due to navigation error.`) // 로그 추가
         window.location.href = targetUrl
       }
-
-      // 키워드 처리 완료 알림
-      console.log(`[FRONTEND] Keyword "${keyword}" processing completed`)
-    } catch (error) {
-      console.error("[FRONTEND] Error in handleKeywordSearch:", error)
+    } catch (err) {
+      console.error("[FRONTEND] Error processing keyword:", err)
     }
   }
 
@@ -209,18 +222,8 @@
 
     if (browser) {
       try {
-        // 간단한 OS 플랫폼 감지
-        let osType: string = "unknown"
-
-        // Tauri 플러그인 대신 navigator.platform 사용
-        const navPlatform = navigator.platform.toLowerCase()
-        if (navPlatform.includes("win")) osType = "windows"
-        else if (navPlatform.includes("mac")) osType = "macos"
-        else if (navPlatform.includes("linux")) osType = "linux"
-
-        console.log("[Layout] Detected platform:", osType)
+        const osType: string = await getOsPlatform()
         currentPlatform = osType
-
         if (osType === "windows") {
           // Check if config files exist on startup
           try {

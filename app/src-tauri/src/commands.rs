@@ -6,11 +6,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
-use std::error::Error;
-use std::io::Write;
 use std::os::windows::process::CommandExt;
 use std::{env, fs, path::PathBuf, process::Command as StdCommand}; // env added for accessing environment variables at runtime
-use tauri::{AppHandle, Emitter, Manager, Runtime, State}; // Runtime, Emitter 추가
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::time::{sleep, Duration};
 use urlencoding::encode;
 
@@ -1291,7 +1289,12 @@ pub fn reset_mcp_settings(app: AppHandle) -> Result<(), String> {
             new_mcplink_config.insert("-1".to_string(), fallback_value.clone());
         }
 
-        // Write modified configuration to file        let mcplink_json = serde_json::to_string_pretty(&new_mcplink_config)            .map_err(|e| format!("Failed to serialize mcplink config: {}", e))?;        // mcplink_path 가져오기        let mcplink_path = claude_dir.join("mcplink_desktop_config.json");        fs::write(&mcplink_path, mcplink_json)            .map_err(|e| format!("Failed to write mcplink config file: {}", e))?;
+        // Write modified configuration to file
+        let mcplink_json = serde_json::to_string_pretty(&new_mcplink_config)
+            .map_err(|e| format!("Failed to serialize mcplink config: {}", e))?;
+
+        fs::write(&mcplink_config_path, mcplink_json)
+            .map_err(|e| format!("Failed to write mcplink config file: {}", e))?;
     }
 
     Ok(())
@@ -1398,6 +1401,7 @@ pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] test_search_keyword 명령 호출됨: {}",
@@ -1411,6 +1415,7 @@ pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String
 
     // Window 찾아서 search-keyword 이벤트 발생
     if let Some(window) = app.get_webview_window("main") {
+        use tauri::Emitter;
         let _ = window.emit("search-keyword", keyword.clone());
     }
 
@@ -1421,6 +1426,7 @@ pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] test_search_keyword 명령 성공",
@@ -1433,7 +1439,7 @@ pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String
 
 // 알림 클릭 시뮬레이션 함수 (알림 클릭 테스트용)
 #[tauri::command]
-pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(), String> {
+pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<(), String> {
     // 디버그 로그 파일에 기록
     let log_path = std::env::temp_dir().join("mcplink_test.log");
     if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -1442,6 +1448,7 @@ pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] simulate_notification_click 명령 호출됨: {}",
@@ -1460,6 +1467,7 @@ pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(
         .append(true)
         .open(&click_log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] 알림 클릭 시뮬레이션: {}",
@@ -1471,6 +1479,7 @@ pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(
     // 키워드를 임시 파일에 저장 (감시 스레드에서 처리하도록)
     let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
     if let Ok(mut file) = std::fs::File::create(&keyword_path) {
+        use std::io::Write;
         let _ = write!(file, "{}", keyword);
 
         // 로그 파일에 기록
@@ -1480,6 +1489,7 @@ pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(
             .append(true)
             .open(&click_log_path)
         {
+            use std::io::Write;
             let _ = writeln!(
                 log_file,
                 "[{}] 알림 클릭 처리: 키워드 파일 생성됨 (작업 ID: {})",
@@ -1502,6 +1512,7 @@ pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] simulate_notification_click: 앱 활성화 시도 결과: {}",
@@ -1521,6 +1532,7 @@ pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] simulate_notification_click 명령 성공",
@@ -1531,269 +1543,66 @@ pub fn simulate_notification_click(_app: AppHandle, keyword: String) -> Result<(
     Ok(())
 }
 
-/// 앱 활성화 상태를 확인하고 키워드가 있으면 표시하는 함수
+// 앱 활성화 상태를 확인하고 키워드가 있으면 표시하는 함수
 #[tauri::command]
 pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, String> {
-    // 키워드 파일 경로 (알림 클릭 시 생성됨)
-    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-    // 임시 키워드 파일 경로 (알림 표시 시 생성됨)
-    let pending_keyword_path = std::env::temp_dir().join("mcplink_pending_keyword.txt");
-    let log_path = std::env::temp_dir().join("mcplink_activation.log");
+    // 키워드 상태 확인
+    if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
+        // 키워드가 있으면 가져오기
+        if keyword_state.has_keyword() {
+            let keyword = keyword_state.take_keyword();
 
-    // 함수 호출 기록
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        let _ = writeln!(
-            file,
-            "[{}] check_and_mark_app_activated 함수 호출됨",
-            chrono::Local::now().format("%H:%M:%S")
-        );
+            // 로그 파일에 기록
+            let log_path = std::env::temp_dir().join("mcplink_activation.log");
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&log_path)
+            {
+                use std::io::Write;
+                let _ = writeln!(
+                    file,
+                    "[{}] check_and_mark_app_activated: 키워드 발견: {:?}",
+                    chrono::Local::now().format("%H:%M:%S"),
+                    keyword
+                );
+            }
+
+            return Ok(keyword);
+        }
     }
 
-    // 키워드 확인 프로세스
-    // 1. 먼저 last_keyword.txt 파인 확인
+    // 키워드 파일에서 직접 확인
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
     if keyword_path.exists() {
         if let Ok(keyword) = std::fs::read_to_string(&keyword_path) {
             if !keyword.is_empty() {
                 // 로그 파일에 기록
+                let log_path = std::env::temp_dir().join("mcplink_activation.log");
                 if let Ok(mut file) = std::fs::OpenOptions::new()
                     .create(true)
                     .write(true)
                     .append(true)
                     .open(&log_path)
                 {
+                    use std::io::Write;
                     let _ = writeln!(
                         file,
-                        "[{}] 키워드 파음: {}",
+                        "[{}] check_and_mark_app_activated: 파일에서 키워드 발견: {}",
                         chrono::Local::now().format("%H:%M:%S"),
                         keyword
                     );
                 }
 
-                // 키워드 이벤트 발송 - Tauri v2.0 호환성 수정
-                let _ = app.emit("search-keyword", keyword.clone());
-
-                // 로그 파일에 기록
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    let _ = writeln!(
-                        file,
-                        "[{}] search-keyword 이벤트 발생됨",
-                        chrono::Local::now().format("%H:%M:%S")
-                    );
-                }
-
-                // 키워드 파일 삭제 (중복 처리 방지)
+                // 키워드 파일 삭제
                 let _ = std::fs::remove_file(&keyword_path);
 
-                // 로그 파일에 기록
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    let _ = writeln!(
-                        file,
-                        "[{}] 키워드 파일 삭제됨",
-                        chrono::Local::now().format("%H:%M:%S")
-                    );
-                }
-
-                // 키워드 반환
-                return Ok(Some(keyword));
-            }
-        }
-    }
-    // 2. pending_keyword.txt 파인 확인 (알림 과정에서 생성된 경우)
-    else if pending_keyword_path.exists() {
-        if let Ok(keyword) = std::fs::read_to_string(&pending_keyword_path) {
-            if !keyword.is_empty() {
-                // 로그 파일에 기록
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    let _ = writeln!(
-                        file,
-                        "[{}] 대기 중인 키워드 발견: {}",
-                        chrono::Local::now().format("%H:%M:%S"),
-                        keyword
-                    );
-                }
-
-                // pending 파일 삭제
-                let _ = std::fs::remove_file(&pending_keyword_path);
-
-                // last_keyword 파일로 복사 (다른 메커니즘에서 사용할 수 있도록)
-                if let Ok(mut file) = std::fs::File::create(&keyword_path) {
-                    let _ = write!(file, "{}", keyword);
-                }
-
-                // 키워드 이벤트 발송
-                let _ = app.emit("search-keyword", keyword.clone());
-
-                // 로그 파일에 기록
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    let _ = writeln!(
-                        file,
-                        "[{}] 대기 중인 키워드에서 search-keyword 이벤트 발생됨",
-                        chrono::Local::now().format("%H:%M:%S")
-                    );
-                }
-
                 return Ok(Some(keyword));
             }
         }
     }
 
-    // 로그 파일에 기록
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        let _ = writeln!(
-            file,
-            "[{}] 처리할 키워드 없음",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
+    // 키워드가 없음
     Ok(None)
-}
-
-/// 딥링크 초기화 및 핸들러 등록
-pub fn init_deep_link_handler<R: Runtime>(_app: &mut tauri::App<R>) -> Result<(), Box<dyn Error>> {
-    let log_path = std::env::temp_dir().join("mcplink_notification_click.log");
-
-    // 로그 파일에 기록
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] 딥링크 핸들러 초기화",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    // Tauri 2.0에서는 register_uri_scheme_protocol 대신
-    // deep-link 플러그인을 사용하므로 여기서는 초기화 로그만 남깁니다.
-    // 실제 URL 처리는 lib.rs의 setup_deep_link_handler에서 처리됩니다.
-
-    Ok(())
-}
-
-/// 딥링크 URL 처리
-pub fn handle_deeplink_url<R: Runtime>(_app: &AppHandle<R>, url: &str) {
-    let log_path = std::env::temp_dir().join("mcplink_notification_click.log");
-
-    // URL에서 키워드 파라미터 추출
-    if url.starts_with("mcplink://") || url.starts_with("mcplink:") {
-        // 로그 기록
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path)
-        {
-            use std::io::Write;
-            let _ = writeln!(
-                file,
-                "[{}] 딥링크 URL 처리: {}",
-                chrono::Local::now().format("%H:%M:%S"),
-                url
-            );
-        }
-
-        let parts: Vec<&str> = url.split('?').collect();
-        if parts.len() > 1 {
-            let params: Vec<&str> = parts[1].split('&').collect();
-            for param in params {
-                if param.starts_with("keyword=") {
-                    let keyword = param.replace("keyword=", "");
-                    if !keyword.is_empty() {
-                        // 로그 기록
-                        if let Ok(mut file) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .append(true)
-                            .open(&log_path)
-                        {
-                            use std::io::Write;
-                            let _ = writeln!(
-                                file,
-                                "[{}] 딥링크에서 키워드 추출: {}",
-                                chrono::Local::now().format("%H:%M:%S"),
-                                keyword
-                            );
-                        }
-
-                        // 키워드 파일 생성
-                        let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-                        if let Ok(mut file) = std::fs::File::create(&keyword_path) {
-                            use std::io::Write;
-                            let _ = write!(file, "{}", keyword);
-
-                            // 로그 기록
-                            if let Ok(mut log_file) = std::fs::OpenOptions::new()
-                                .create(true)
-                                .write(true)
-                                .append(true)
-                                .open(&log_path)
-                            {
-                                use std::io::Write;
-                                let _ = writeln!(
-                                    log_file,
-                                    "[{}] 딥링크 처리: 키워드 파일 생성됨",
-                                    chrono::Local::now().format("%H:%M:%S")
-                                );
-                            }
-                        }
-
-                        // 앱 활성화
-                        if let Err(e) = crate::force_activate::force_app_to_foreground() {
-                            // 로그 기록
-                            if let Ok(mut file) = std::fs::OpenOptions::new()
-                                .create(true)
-                                .write(true)
-                                .append(true)
-                                .open(&log_path)
-                            {
-                                use std::io::Write;
-                                let _ = writeln!(
-                                    file,
-                                    "[{}] 앱 활성화 오류: {}",
-                                    chrono::Local::now().format("%H:%M:%S"),
-                                    e
-                                );
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
 }

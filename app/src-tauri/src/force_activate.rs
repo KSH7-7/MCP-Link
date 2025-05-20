@@ -4,6 +4,9 @@
 //! 앱을 강제로 활성화하고 전면으로 가져오는 기능을 제공합니다.
 
 #[cfg(target_os = "windows")]
+use std::ptr::null_mut;
+
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{HWND, LPARAM, BOOL};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -19,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 #[cfg(target_os = "windows")]
-use windows::core::PCWSTR;
+use windows::core::{PCWSTR, PWSTR};
 
 #[cfg(target_os = "windows")]
 // use std::sync::OnceLock; // 사용하지 않음
@@ -189,7 +192,6 @@ fn find_app_window(log_path: &std::path::Path) -> Option<HWND> {
 #[cfg(target_os = "windows")]
 pub fn force_app_to_foreground() -> Result<(), String> {
     unsafe {
-        // Tauri v2.0 호환성: 앱 활성화 개선을 위한 코드 수정
         // 디버그 로그 파일 경로
         let log_path = std::env::temp_dir().join("mcplink_activation.log");
 
@@ -204,12 +206,27 @@ pub fn force_app_to_foreground() -> Result<(), String> {
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
         }
 
-        // *** 중요 수정: Tauri v2.0에서 알려진 버그 처리 ***
-        // Tauri v2.0에서 unstable 기능 사용 시 WindowEvent::Focused 이벤트가 제대로 
-        // 전달되지 않는 버그가 있음 (GitHub Issue #9755)
+        // AllowSetForegroundWindow 호출 - 모든 프로세스에서 포그라운드 설정 허용
+        AllowSetForegroundWindow(ASFW_ANY);
         
-        // 최대 3번 시도 - Tauri v2.0에서 앱 활성화가 더 어려워진 경우를 대비
-        for attempt in 1..=3 {
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] AllowSetForegroundWindow(ASFW_ANY) 호출됨", 
+                chrono::Local::now().format("%H:%M:%S"));
+        }
+
+        // 모든 가능한 방법을 시도하여 앱 창 찾기
+        let mut hwnd = HWND(0);
+        
+        // 1. 새로운 방식: EnumWindows 콜백 사용하여 모든 창 검색
+        if let Some(found_hwnd) = find_app_window(&log_path) {
+            hwnd = found_hwnd;
+            
             // 로그 파일에 기록
             if let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)
@@ -217,13 +234,97 @@ pub fn force_app_to_foreground() -> Result<(), String> {
                 .append(true)
                 .open(&log_path) {
                 use std::io::Write;
-                let _ = writeln!(file, "[{}] 앱 활성화 시도 #{} 시작", 
-                    chrono::Local::now().format("%H:%M:%S"), attempt);
+                let _ = writeln!(file, "[{}] EnumWindows를 통해 창 찾음: {:?}", 
+                    chrono::Local::now().format("%H:%M:%S"), hwnd.0);
+            }
+        }
+        
+        // 2. 정확한 클래스 이름과 창 이름으로 시도
+        if hwnd.0 == 0 {
+            let exact_window_wide = to_wide_string("MCP Link");
+            let exact_class_wide = to_wide_string("Tauri Window");
+            
+            hwnd = FindWindowW(
+                PCWSTR::from_raw(exact_class_wide.as_ptr()),
+                PCWSTR::from_raw(exact_window_wide.as_ptr()),
+            );
+            
+            // 로그 파일에 기록
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&log_path) {
+                use std::io::Write;
+                let _ = writeln!(file, "[{}] 정확한 조합 시도: FindWindowW(class='Tauri Window', name='MCP Link') 결과: {}", 
+                    chrono::Local::now().format("%H:%M:%S"),
+                    if hwnd.0 == 0 { "실패" } else { "성공" });
+            }
+        }
+        
+        // 3. 다양한 창 이름 조합 시도 (fallback)
+        if hwnd.0 == 0 {
+            for alt_window_name in ALT_WINDOW_NAMES.iter() {
+                let window_wide = to_wide_string(alt_window_name);
+                let current_hwnd = FindWindowW(
+                    PCWSTR::from_raw(std::ptr::null()),  // NULL 클래스 이름 (모든 클래스)
+                    PCWSTR::from_raw(window_wide.as_ptr()),
+                );
+
+                // 로그 파일에 기록
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path) {
+                    use std::io::Write;
+                    let _ = writeln!(file, "[{}] 대체 이름 시도: FindWindowW(class=NULL, name='{}') 결과: {}", 
+                        chrono::Local::now().format("%H:%M:%S"),
+                        alt_window_name,
+                        if current_hwnd.0 == 0 { "실패" } else { "성공" });
+                }
+
+                if current_hwnd.0 != 0 {
+                    hwnd = current_hwnd;
+                    break;
+                }
+            }
+        }
+        
+        // 창을 찾지 못했을 경우 오류 반환
+        if hwnd.0 == 0 {
+            let err_msg = "앱 창을 찾을 수 없습니다";
+            
+            // 로그 파일에 실패 기록
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&log_path) {
+                use std::io::Write;
+                let _ = writeln!(file, "[{}] 오류: {}", 
+                    chrono::Local::now().format("%H:%M:%S"), err_msg);
             }
             
-            // AllowSetForegroundWindow 호출 - 모든 프로세스에서 포그라운드 설정 허용
-            AllowSetForegroundWindow(ASFW_ANY);
+            return Err(err_msg.to_string());
+        }
         
+        // 활성화 단계 시작 - 다양한 방법 시도
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 앱 활성화 단계 시작 (hwnd: {:?})", 
+                chrono::Local::now().format("%H:%M:%S"), hwnd.0);
+        }
+        
+        // 1. 아이콘 상태인 경우 복원
+        if IsIconic(hwnd).as_bool() {
+            ShowWindow(hwnd, SW_RESTORE);
+            
             // 로그 파일에 기록
             if let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)
@@ -231,17 +332,109 @@ pub fn force_app_to_foreground() -> Result<(), String> {
                 .append(true)
                 .open(&log_path) {
                 use std::io::Write;
-                let _ = writeln!(file, "[{}] AllowSetForegroundWindow(ASFW_ANY) 호출됨", 
+                let _ = writeln!(file, "[{}] 최소화된 창 복원 (ShowWindow/SW_RESTORE)", 
                     chrono::Local::now().format("%H:%M:%S"));
             }
-
-            // 모든 가능한 방법을 시도하여 앱 창 찾기
-            let mut hwnd = HWND(0);
             
-            // 1. 새로운 방식: EnumWindows 콜백 사용하여 모든 창 검색
-            if let Some(found_hwnd) = find_app_window(&log_path) {
-                hwnd = found_hwnd;
-                
+            // 잠시 대기
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        
+        // 2. 창 표시 (숨겨진 경우 대비)
+        ShowWindow(hwnd, SW_SHOW);
+        
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 창 표시 (ShowWindow/SW_SHOW)", 
+                chrono::Local::now().format("%H:%M:%S"));
+        }
+        
+        // 3. 창을 전면으로 배치 (SetWindowPos/HWND_TOPMOST)
+        SetWindowPos(
+            hwnd, 
+            HWND_TOPMOST, 
+            0, 0, 0, 0, 
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+        );
+        
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 창을 최상위로 설정 (SetWindowPos/HWND_TOPMOST)", 
+                chrono::Local::now().format("%H:%M:%S"));
+        }
+        
+        // 잠시 대기
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        
+        // 4. 일반 z-order로 복원 (SetWindowPos/HWND_NOTOPMOST)
+        SetWindowPos(
+            hwnd, 
+            HWND_NOTOPMOST, 
+            0, 0, 0, 0, 
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+        );
+        
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 일반 z-order로 복원 (SetWindowPos/HWND_NOTOPMOST)", 
+                chrono::Local::now().format("%H:%M:%S"));
+        }
+        
+        // 5. 창을 맨 위로 가져오기 (BringWindowToTop)
+        BringWindowToTop(hwnd);
+        
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "[{}] 창을 맨 위로 가져오기 (BringWindowToTop)", 
+                chrono::Local::now().format("%H:%M:%S"));
+        }
+        
+        // 6. 최대 활성화 시도 - 스레드 연결을 통한 방법
+        let fg_window = GetForegroundWindow();
+        if fg_window != hwnd {
+            // 로그 파일에 기록
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&log_path) {
+                use std::io::Write;
+                let _ = writeln!(file, "[{}] 전경 창이 대상 창과 다름, 스레드 연결 시도", 
+                    chrono::Local::now().format("%H:%M:%S"));
+            }
+            
+            let current_thread_id = GetCurrentThreadId();
+            
+            // 스레드 ID를 저장할 변수 정의
+            let mut fg_thread_id: u32 = 0;
+            let mut target_thread_id: u32 = 0;
+            
+            // 스레드 ID 조회 (타입 오류 수정)
+            GetWindowThreadProcessId(fg_window, Some(&mut fg_thread_id));
+            GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
+            
+            // 현재 스레드와 전경 창 스레드 연결
+            if AttachThreadInput(current_thread_id, fg_thread_id, true).as_bool() {
                 // 로그 파일에 기록
                 if let Ok(mut file) = std::fs::OpenOptions::new()
                     .create(true)
@@ -249,43 +442,15 @@ pub fn force_app_to_foreground() -> Result<(), String> {
                     .append(true)
                     .open(&log_path) {
                     use std::io::Write;
-                    let _ = writeln!(file, "[{}] EnumWindows를 통해 창 찾음: {:?}", 
-                        chrono::Local::now().format("%H:%M:%S"), hwnd.0);
+                    let _ = writeln!(file, "[{}] 현재 스레드와 전경 스레드 연결됨", 
+                        chrono::Local::now().format("%H:%M:%S"));
                 }
-            }
-            
-            // 2. 정확한 클래스 이름과 창 이름으로 시도
-            if hwnd.0 == 0 {
-                let exact_window_wide = to_wide_string("MCP Link");
-                let exact_class_wide = to_wide_string("Tauri Window");
                 
-                hwnd = FindWindowW(
-                    PCWSTR::from_raw(exact_class_wide.as_ptr()),
-                    PCWSTR::from_raw(exact_window_wide.as_ptr()),
-                );
-                
-                // 로그 파일에 기록
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path) {
-                    use std::io::Write;
-                    let _ = writeln!(file, "[{}] 정확한 조합 시도: FindWindowW(class='Tauri Window', name='MCP Link') 결과: {}", 
-                        chrono::Local::now().format("%H:%M:%S"),
-                        if hwnd.0 == 0 { "실패" } else { "성공" });
-                }
-            }
-            
-            // 3. 다양한 창 이름 조합 시도 (fallback)
-            if hwnd.0 == 0 {
-                for alt_window_name in ALT_WINDOW_NAMES.iter() {
-                    let window_wide = to_wide_string(alt_window_name);
-                    let current_hwnd = FindWindowW(
-                        PCWSTR::from_raw(std::ptr::null()),  // NULL 클래스 이름 (모든 클래스)
-                        PCWSTR::from_raw(window_wide.as_ptr()),
-                    );
-
+                // 전경 창 스레드와 대상 창 스레드 연결 (필요한 경우)
+                let mut thread_attached = true;
+                if fg_thread_id != target_thread_id {
+                    thread_attached = AttachThreadInput(fg_thread_id, target_thread_id, true).as_bool();
+                    
                     // 로그 파일에 기록
                     if let Ok(mut file) = std::fs::OpenOptions::new()
                         .create(true)
@@ -293,41 +458,14 @@ pub fn force_app_to_foreground() -> Result<(), String> {
                         .append(true)
                         .open(&log_path) {
                         use std::io::Write;
-                        let _ = writeln!(file, "[{}] 대체 이름 시도: FindWindowW(class=NULL, name='{}') 결과: {}", 
+                        let _ = writeln!(file, "[{}] 전경 스레드와 대상 스레드 연결 {}", 
                             chrono::Local::now().format("%H:%M:%S"),
-                            alt_window_name,
-                            if current_hwnd.0 == 0 { "실패" } else { "성공" });
+                            if thread_attached { "성공" } else { "실패" });
                     }
-
-                    if current_hwnd.0 != 0 {
-                        hwnd = current_hwnd;
-                        break;
-                    }
-                }
-            }
-            
-            // 창을 찾지 못했을 경우 다음 시도로 넘어감
-            if hwnd.0 == 0 {
-                // 로그 파일에 실패 기록
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path) {
-                    use std::io::Write;
-                    let _ = writeln!(file, "[{}] 시도 #{}: 앱 창을 찾을 수 없음. 다음 시도로 진행...", 
-                        chrono::Local::now().format("%H:%M:%S"), attempt);
                 }
                 
-                // 다음 시도 전에 약간의 대기 시간 추가
-                std::thread::sleep(std::time::Duration::from_millis(300));
-                continue;
-            }
-
-            // *** 중요 수정: 활성화 순서 조정 및 확실한 메시지 전달 ***
-            // 아이콘 상태 확인 후 필요하면 복원
-            if IsIconic(hwnd).as_bool() {
-                ShowWindow(hwnd, SW_RESTORE);
+                // 전경 설정
+                SetForegroundWindow(hwnd);
                 
                 // 로그 파일에 기록
                 if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -336,100 +474,66 @@ pub fn force_app_to_foreground() -> Result<(), String> {
                     .append(true)
                     .open(&log_path) {
                     use std::io::Write;
-                    let _ = writeln!(file, "[{}] 최소화된 창 복원 (ShowWindow/SW_RESTORE)", 
+                    let _ = writeln!(file, "[{}] SetForegroundWindow 호출됨 (스레드 연결 후)", 
                         chrono::Local::now().format("%H:%M:%S"));
                 }
                 
-                // 복원 후 약간의 대기 시간 추가
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-            
-            // 다양한 방법으로 창 활성화 시도 (순서 중요)
-            // 1. 창 표시
-            ShowWindow(hwnd, SW_SHOW);
-            
-            // 2. 일시적으로 최상위로 설정
-            SetWindowPos(
-                hwnd, 
-                HWND_TOPMOST, 
-                0, 0, 0, 0, 
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
-            );
-            
-            // 3. 잠시 대기 후 일반 z-order로 복원
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            SetWindowPos(
-                hwnd, 
-                HWND_NOTOPMOST, 
-                0, 0, 0, 0, 
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
-            );
-            
-            // 4. BringWindowToTop - 이전 포그라운드 창보다 앞으로 가져오기
-            BringWindowToTop(hwnd);
-            
-            // 5. 현재 활성 스레드와 대상 창 스레드 연결 시도
-            let fg_window = GetForegroundWindow();
-            if fg_window != hwnd {
-                let current_thread_id = GetCurrentThreadId();
-                
-                let mut fg_thread_id: u32 = 0;
-                let mut target_thread_id: u32 = 0;
-                
-                GetWindowThreadProcessId(fg_window, Some(&mut fg_thread_id));
-                GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
-                
-                if AttachThreadInput(current_thread_id, fg_thread_id, true).as_bool() {
-                    // 필요시 다른 스레드도 연결
-                    let mut thread_attached = true;
-                    if fg_thread_id != target_thread_id {
-                        thread_attached = AttachThreadInput(fg_thread_id, target_thread_id, true).as_bool();
-                    }
-                    
-                    // 스레드 연결 상태에서 SetForegroundWindow 호출
-                    SetForegroundWindow(hwnd);
-                    
-                    // 스레드 연결 해제
-                    if fg_thread_id != target_thread_id && thread_attached {
-                        AttachThreadInput(fg_thread_id, target_thread_id, false);
-                    }
-                    AttachThreadInput(current_thread_id, fg_thread_id, false);
-                } else {
-                    // 직접 SetForegroundWindow 호출
-                    SetForegroundWindow(hwnd);
+                // 스레드 연결 해제
+                if fg_thread_id != target_thread_id && thread_attached {
+                    AttachThreadInput(fg_thread_id, target_thread_id, false);
                 }
+                AttachThreadInput(current_thread_id, fg_thread_id, false);
+                
+                // 로그 파일에 기록
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path) {
+                    use std::io::Write;
+                    let _ = writeln!(file, "[{}] 스레드 연결 해제됨", 
+                        chrono::Local::now().format("%H:%M:%S"));
+                }
+            } else {
+                // 스레드 연결 실패 시 직접 SetForegroundWindow 시도
+                // 로그 파일에 기록
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path) {
+                    use std::io::Write;
+                    let _ = writeln!(file, "[{}] 스레드 연결 실패, 직접 SetForegroundWindow 시도", 
+                        chrono::Local::now().format("%H:%M:%S"));
+                }
+                
+                SetForegroundWindow(hwnd);
             }
-            
-            // 6. 마지막으로 정상(Normal) 상태로 표시하고 전경으로 설정
-            ShowWindow(hwnd, SW_SHOWNORMAL);
-            SetForegroundWindow(hwnd);
-            
-            // 마무리: 약간의 시간 지연 추가 - 포커스 획득에 필요한 시간 제공
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            
-            // 로그 파일에 성공 기록
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&log_path) {
-                use std::io::Write;
-                let _ = writeln!(file, "[{}] 시도 #{}: 앱 활성화 과정 완료", 
-                    chrono::Local::now().format("%H:%M:%S"), attempt);
-            }
-            
-            // 성공했으므로 전체 루프 종료
-            break;
-        } // end of for loop
+        }
         
-        // 최종 성공 로그 기록
+        // 7. 마지막으로 한 번 더 창 활성화
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd);
+        
+        // 로그 파일에 기록
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
             .open(&log_path) {
             use std::io::Write;
-            let _ = writeln!(file, "=== [{}] 앱 강제 활성화 시도 완료 ===", 
+            let _ = writeln!(file, "[{}] 최종 활성화 시도 (SW_SHOWNORMAL + SetForegroundWindow)", 
+                chrono::Local::now().format("%H:%M:%S"));
+        }
+        
+        // 로그 파일에 성공 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path) {
+            use std::io::Write;
+            let _ = writeln!(file, "=== [{}] 앱 강제 활성화 과정 완료 ===", 
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
         }
         

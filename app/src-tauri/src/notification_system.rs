@@ -2,10 +2,9 @@
 //! Windows에서는 winrt-notification, 다른 플랫폼에서는 notify-rust 사용
 
 use std::error::Error;
-use std::io::Write;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-// 알림 클릭 시 사용할 URI 스킴
+// 파일 생성을 위한 std::io::Write는 사용하는 위치에서 직접 import
 
 // 알림 클릭 시 사용할 URI 스킴
 const URI_SCHEME: &str = "mcplink://notification";
@@ -60,6 +59,7 @@ pub fn show_windows_notification(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] Showing Windows notification: title='{}', body='{}', keyword={:?}",
@@ -84,6 +84,7 @@ pub fn show_windows_notification(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "[{}] Using URI: {}",
@@ -92,25 +93,30 @@ pub fn show_windows_notification(
         );
     }
 
-    // Tauri v2.0 호환성: 키워드를 즉시 저장 (알림이 클릭되지 않더라도)
-    // 이렇게 하면 앱이 활성화될 때 키워드를 찾을 수 있습니다
-    if let Some(kw) = &keyword {
-        // 키워드 상태 저장
-        // 이 키워드는 check_and_mark_app_activated 함수에서 사용됨
-        let keyword_pending_path = std::env::temp_dir().join("mcplink_pending_keyword.txt");
-        if let Ok(mut file) = std::fs::File::create(&keyword_pending_path) {
+    // 알림 클릭 시 즉시 키워드 파일 생성 - 이 방식은 알림이 표시될 때 미리 키워드 파일을 준비하는 것
+    if let Some(ref kw) = keyword {
+        // 키워드 파일 경로
+        let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+
+        // 알림 클릭 로그 파일 경로
+        let click_log_path = std::env::temp_dir().join("mcplink_notification_click.log");
+
+        // 키워드 파일 생성 (알림 클릭 시 read_file 함수가 이를 감지할 수 있도록)
+        if let Ok(mut file) = std::fs::File::create(&keyword_path) {
+            use std::io::Write;
             let _ = write!(file, "{}", kw);
 
-            // 로그 기록
-            if let Ok(mut log_file) = std::fs::OpenOptions::new()
+            // 로그 파일에 기록
+            if let Ok(mut click_file) = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
                 .append(true)
-                .open(&log_path)
+                .open(&click_log_path)
             {
+                use std::io::Write;
                 let _ = writeln!(
-                    log_file,
-                    "[{}] 키워드 임시 저장됨 (pending): {}",
+                    click_file,
+                    "[{}] 알림 표시와 함께 키워드 파일 생성됨: {}",
                     chrono::Local::now().format("%H:%M:%S"),
                     kw
                 );
@@ -118,11 +124,12 @@ pub fn show_windows_notification(
         }
     }
 
-    // 알림 생성 - Toast 객체 설정
-    // winrt-notification 라이브러리는 직접적인 딥링크 설정을 지원하지 않음
-    // 대신 PowerShell 앱 ID를 사용하여 알림을 표시하고,
-    // 사용자가 알림을 클릭하면 앱 자체의 딥링크 핸들러가 처리함
-    // Tauri v2.0 호환성: 앱 식별자 사용    let toast = Toast::new("com.ssafy12ksh.app")        .title(title)        .text1(body)        .sound(Some(Sound::Default))        .duration(Duration::Short);
+    // 알림 생성 - 추가 핸들러 구성
+    let toast = Toast::new(Toast::POWERSHELL_APP_ID)
+        .title(title)
+        .text1(body)
+        .sound(Some(Sound::Default))
+        .duration(Duration::Short);
 
     // 로그에 알림 설정 기록
     if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -131,9 +138,10 @@ pub fn show_windows_notification(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
-            "[{}] Toast notification configured",
+            "[{}] Toast notification configured with activation handler",
             chrono::Local::now().format("%H:%M:%S")
         );
     }
@@ -148,6 +156,7 @@ pub fn show_windows_notification(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         match &result {
             Ok(_) => {
                 let _ = writeln!(
@@ -164,37 +173,6 @@ pub fn show_windows_notification(
                     e
                 );
             }
-        }
-    }
-
-    // 알림이 성공적으로 표시되면 키워드 전달을 위한 임시 파일 생성
-    if result.is_ok() && keyword.is_some() {
-        let kw = keyword.unwrap();
-
-        // 알림 클릭 로그 파일 경로
-        let click_log_path = std::env::temp_dir().join("mcplink_notification_click.log");
-
-        // 로그 기록
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&click_log_path)
-        {
-            let _ = writeln!(
-                file,
-                "[{}] 알림 표시 성공, 키워드 전달을 위한 임시 파일 생성: {}",
-                chrono::Local::now().format("%H:%M:%S"),
-                kw
-            );
-        }
-
-        // 키워드 상태 저장
-        // 이 키워드는 check_and_mark_app_activated 함수에서 사용됨
-        // 알림 클릭 시 mcplink:// 프로토콜 처리 이후 앱이 실행되고 이 키워드를 읽음
-        let keyword_tmp_path = std::env::temp_dir().join("mcplink_pending_keyword.txt");
-        if let Ok(mut file) = std::fs::File::create(&keyword_tmp_path) {
-            let _ = write!(file, "{}", kw);
         }
     }
 
@@ -286,9 +264,10 @@ pub fn show_notification<R: Runtime>(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
-            "[{}] show_notification called: title='{}', body='{}', keyword={:?}",
+            "[{}] Show notification called: title='{}', body='{}', keyword={:?}",
             chrono::Local::now().format("%H:%M:%S"),
             title,
             body,
@@ -307,6 +286,7 @@ pub fn show_notification<R: Runtime>(
             .append(true)
             .open(&log_path)
         {
+            use std::io::Write;
             let _ = writeln!(
                 file,
                 "[{}] Keyword saved to state: {}",
@@ -327,6 +307,7 @@ pub fn show_notification<R: Runtime>(
             .append(true)
             .open(&log_path)
         {
+            use std::io::Write;
             let _ = writeln!(
                 file,
                 "[{}] Emitted store-keyword event: {}",
@@ -361,6 +342,7 @@ pub fn show_notification<R: Runtime>(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         match &result {
             Ok(_) => {
                 let _ = writeln!(
@@ -398,6 +380,7 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
             "=== [{}] 알림 시스템 초기화됨 ===",
@@ -405,83 +388,288 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
         );
     }
 
-    // 시작 시 키워드 파일 상태 확인
-    check_keyword_files();
+    // 알림 클릭 감지를 위한 키워드 파일 감시 스레드 시작
+    let app_handle = app.handle().clone();
 
-    Ok(())
-}
-
-/// 키워드 파일들의 상태를 확인하고 정리하는 함수
-fn check_keyword_files() {
-    // 로그 파일 경로
-    let log_path = std::env::temp_dir().join("mcplink_activation.log");
-
-    // 각 키워드 파일 경로
-    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-    let pending_keyword_path = std::env::temp_dir().join("mcplink_pending_keyword.txt");
-
-    // 파일 상태 로깅
+    // 로그 파일에 기록
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
         .open(&log_path)
     {
+        use std::io::Write;
         let _ = writeln!(
             file,
-            "[{}] 키워드 파일 상태 확인: last_keyword 존재={}, pending_keyword 존재={}",
-            chrono::Local::now().format("%H:%M:%S"),
-            keyword_path.exists(),
-            pending_keyword_path.exists()
+            "[{}] 알림 시스템 초기화 - 키워드 파일 감시 시작",
+            chrono::Local::now().format("%H:%M:%S")
         );
     }
 
-    // pending 키워드가 있고 last 키워드가 없다면 복사
-    if pending_keyword_path.exists() && !keyword_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&pending_keyword_path) {
-            if !content.is_empty() {
-                // last_keyword 파일 생성
-                if let Ok(mut file) = std::fs::File::create(&keyword_path) {
-                    let _ = write!(file, "{}", content);
+    // 이전에 생성된 키워드 파일이 있으면 먼저 체크
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+    if keyword_path.exists() {
+        if let Ok(keyword) = std::fs::read_to_string(&keyword_path) {
+            if !keyword.is_empty() {
+                // 로그 파일에 기록
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    use std::io::Write;
+                    let _ = writeln!(
+                        file,
+                        "[{}] 초기화 중 이전 키워드 파일 발견: {}",
+                        chrono::Local::now().format("%H:%M:%S"),
+                        keyword
+                    );
+                }
 
-                    // 로그 기록
-                    if let Ok(mut log) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .append(true)
-                        .open(&log_path)
-                    {
-                        let _ = writeln!(
-                            log,
-                            "[{}] Pending 키워드 '{}'를 last_keyword로 복사함",
-                            chrono::Local::now().format("%H:%M:%S"),
-                            content
-                        );
+                // 키워드 파일 삭제
+                let _ = std::fs::remove_file(&keyword_path);
+            }
+        }
+    }
+
+    // 알림 클릭 감시 스레드 시작 - 무한 루프로 변경
+    std::thread::spawn(move || {
+        // 1초 대기
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        // 무한 루프로 1초마다 키워드 파일 확인
+        loop {
+            // 키워드 파일 경로
+            let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+
+            // 파일이 존재하면 읽기 시도
+            if keyword_path.exists() {
+                if let Ok(keyword) = std::fs::read_to_string(&keyword_path) {
+                    if !keyword.is_empty() {
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path)
+                        {
+                            use std::io::Write;
+                            let _ = writeln!(
+                                file,
+                                "[{}] 감시 스레드: 키워드 파일 감지됨: {}",
+                                chrono::Local::now().format("%H:%M:%S"),
+                                keyword
+                            );
+                        }
+
+                        // 앱 강제 활성화 시도 - 다중 시도 구현
+                        let mut activation_success = false;
+                        for attempt in 1..=5 {
+                            // 시도 횟수 5회로 증가
+                            // 로그 시작
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path)
+                            {
+                                use std::io::Write;
+                                let _ = writeln!(
+                                    file,
+                                    "[{}] 감시 스레드: 앱 활성화 시도 #{}",
+                                    chrono::Local::now().format("%H:%M:%S"),
+                                    attempt
+                                );
+                            }
+
+                            // 활성화 시도
+                            match crate::force_activate::force_app_to_foreground() {
+                                Err(e) => {
+                                    // 오류 로깅
+                                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .write(true)
+                                        .append(true)
+                                        .open(&log_path)
+                                    {
+                                        use std::io::Write;
+                                        let _ = writeln!(
+                                            file,
+                                            "[{}] 감시 스레드: 앱 활성화 오류 #{}: {}",
+                                            chrono::Local::now().format("%H:%M:%S"),
+                                            attempt,
+                                            e
+                                        );
+                                    }
+
+                                    // 잠시 대기 후 재시도 (시도마다 대기시간 증가)
+                                    if attempt < 5 {
+                                        std::thread::sleep(std::time::Duration::from_millis(
+                                            300 * attempt as u64,
+                                        ));
+                                    }
+                                }
+                                Ok(_) => {
+                                    // 성공 로깅
+                                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .write(true)
+                                        .append(true)
+                                        .open(&log_path)
+                                    {
+                                        use std::io::Write;
+                                        let _ = writeln!(
+                                            file,
+                                            "[{}] 감시 스레드: 앱 활성화 성공 #{}",
+                                            chrono::Local::now().format("%H:%M:%S"),
+                                            attempt
+                                        );
+                                    }
+                                    activation_success = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 잠시 대기하여 창이 완전히 활성화되도록 함
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+
+                        // 창 조작 단계적 적용 (최대 3회 시도)
+                        for window_attempt in 1..=3 {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                // 로그 파일에 기록
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path)
+                                {
+                                    use std::io::Write;
+                                    let _ = writeln!(
+                                        file,
+                                        "[{}] 감시 스레드: 창 상태 변경 시도 #{}",
+                                        chrono::Local::now().format("%H:%M:%S"),
+                                        window_attempt
+                                    );
+                                }
+
+                                // 창이 보이도록 설정
+                                let _ = window.unminimize();
+                                let _ = window.show();
+                                let _ = window.set_focus();
+
+                                // 성공 로그
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path)
+                                {
+                                    use std::io::Write;
+                                    let _ = writeln!(
+                                        file,
+                                        "[{}] 감시 스레드: 창 상태 변경 완료",
+                                        chrono::Local::now().format("%H:%M:%S")
+                                    );
+                                }
+
+                                // 창을 찾았으므로 반복 종료
+                                break;
+                            } else {
+                                // 창을 찾지 못한 경우
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path)
+                                {
+                                    use std::io::Write;
+                                    let _ = writeln!(
+                                        file,
+                                        "[{}] 감시 스레드: 창을 찾을 수 없음 (시도 #{})",
+                                        chrono::Local::now().format("%H:%M:%S"),
+                                        window_attempt
+                                    );
+                                }
+
+                                // 다음 시도 전 잠시 대기
+                                if window_attempt < 3 {
+                                    std::thread::sleep(std::time::Duration::from_millis(200));
+                                }
+                            }
+                        }
+
+                        // 마지막으로 키워드 이벤트 발생
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            // 창이 완전히 초기화될 시간을 충분히 제공
+                            std::thread::sleep(std::time::Duration::from_millis(700));
+
+                            let keyword_clone = keyword.clone();
+                            let emit_result = window.emit("search-keyword", keyword_clone);
+
+                            // 로그 파일에 기록
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path)
+                            {
+                                use std::io::Write;
+                                let _ = writeln!(
+                                    file,
+                                    "[{}] 감시 스레드: search-keyword 이벤트 발생: {} (결과: {})",
+                                    chrono::Local::now().format("%H:%M:%S"),
+                                    keyword,
+                                    if emit_result.is_ok() {
+                                        "성공"
+                                    } else {
+                                        "실패"
+                                    }
+                                );
+                            }
+                        } else {
+                            // 창을 찾지 못한 경우
+                            if let Ok(mut file) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .append(true)
+                                .open(&log_path)
+                            {
+                                use std::io::Write;
+                                let _ = writeln!(
+                                    file,
+                                    "[{}] 감시 스레드: 창을 찾을 수 없어 이벤트 발생 실패",
+                                    chrono::Local::now().format("%H:%M:%S")
+                                );
+                            }
+                        }
+
+                        // 키워드 파일 삭제
+                        let _ = std::fs::remove_file(&keyword_path);
+
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path)
+                        {
+                            use std::io::Write;
+                            let _ = writeln!(
+                                file,
+                                "[{}] 감시 스레드: 키워드 파일 삭제됨",
+                                chrono::Local::now().format("%H:%M:%S")
+                            );
+                        }
                     }
-
-                    // pending 파일 삭제
-                    let _ = std::fs::remove_file(&pending_keyword_path);
                 }
             }
-        }
-    }
 
-    // 만약 어떤 이유로든 둘 다 있다면, pending 파일 삭제
-    if pending_keyword_path.exists() && keyword_path.exists() {
-        if let Ok(_) = std::fs::remove_file(&pending_keyword_path) {
-            // 로그 기록
-            if let Ok(mut log_file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&log_path)
-            {
-                let _ = writeln!(
-                    log_file,
-                    "[{}] 중복 키워드 파일 감지: pending_keyword 삭제함",
-                    chrono::Local::now().format("%H:%M:%S")
-                );
-            }
+            // 1초 대기 후 다시 시도
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
-    }
+    });
+
+    Ok(())
 }
