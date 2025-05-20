@@ -18,7 +18,6 @@ export async function showNotification(
     await invoke('show_notification', { title, body, keyword });
     return true;
   } catch (error) {
-    console.error('알림 표시 실패:', error);
     return false;
   }
 }
@@ -34,7 +33,6 @@ export async function handleUriScheme(uri: string): Promise<boolean> {
     await invoke('handle_uri_scheme', { uri });
     return true;
   } catch (error) {
-    console.error('URI 스킴 처리 실패:', error);
     return false;
   }
 }

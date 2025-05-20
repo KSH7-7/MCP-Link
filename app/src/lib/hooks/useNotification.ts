@@ -14,7 +14,6 @@ export function useNotification(onNavigateToMcpList: (keyword: string) => void) 
   onMount(async () => {
     // 일반 탐색 이벤트 처리
     const unlisten1 = await listen('navigate-to', (event) => {
-      console.log('Navigate to:', event.payload);
       // 페이지 이동 로직을 여기에 추가할 수 있습니다.
     });
 
@@ -31,7 +30,6 @@ export function useNotification(onNavigateToMcpList: (keyword: string) => void) 
 
     // 새 키워드 이벤트 처리
     const unlisten3 = await listen('new-keywords', (event) => {
-      console.log('New keywords:', event.payload);
       // 새 키워드 처리 로직을 여기에 추가할 수 있습니다.
     });
 

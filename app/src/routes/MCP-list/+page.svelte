@@ -57,7 +57,7 @@
         allLoaded = true
       }
     } catch (error) {
-      console.error("Error loading next page:", error)
+      // 오류가 발생하면 조용히 실패
     } finally {
       loadingMore = false
     }
@@ -87,7 +87,6 @@
     // 세션 스토리지에서 알림 키워드 확인 (일회성 처리)
     const pendingKeyword = sessionStorage.getItem("pendingSearchKeyword")
     if (pendingKeyword) {
-      console.log("Found pending keyword in session storage:", pendingKeyword)
       searchTermFromQuery = pendingKeyword
       isRecommendedSearch = true
 
@@ -108,7 +107,6 @@
 
       // URL에 키워드가 있으면 마지막 키워드 검사는 건너뜀
       if (urlKeyword) {
-        console.log("Found keyword in URL parameters:", urlKeyword)
         // 마지막 알림 키워드가 URL에 있는 키워드와 같으면 제거
         if (localStorage.getItem("lastNotificationKeyword") === urlKeyword) {
           localStorage.removeItem("lastNotificationKeyword")
@@ -119,7 +117,6 @@
       // 로컬 스토리지에서 마지막 알림 키워드 확인 (백업 처리)
       const lastKeyword = localStorage.getItem("lastNotificationKeyword")
       if (lastKeyword && !pendingKeyword && !searchTermFromQuery) {
-        console.log("Using last notification keyword as fallback:", lastKeyword)
         searchTermFromQuery = lastKeyword
         isRecommendedSearch = true
 
@@ -146,14 +143,11 @@
                 : null
 
           if (keyword) {
-            console.log("수신된 검색 키워드:", keyword)
-
             // 1. 검색창에 키워드 설정 (set-search-term 이벤트 발생)
             try {
               // 검색창에 키워드 설정
               const searchEvent = new CustomEvent("set-search-term", { detail: keyword })
               document.dispatchEvent(searchEvent)
-              console.log("검색창에 키워드 설정됨:", keyword)
 
               // 2. 검색 상태 업데이트 (URL은 업데이트하지 않고 시각적으로만 검색 상태 표시)
               searchTermFromQuery = keyword
@@ -164,17 +158,17 @@
                 searchAndDisplay(keyword)
               }, 200)
             } catch (e) {
-              console.error("검색창 키워드 설정 오류:", e)
+              // 검색창 키워드 설정 중 오류가 발생해도 조용히 넘어감
             }
           } else {
-            console.warn("search-keyword 이벤트에서 키워드를 찾을 수 없음")
+            // 키워드를 찾을 수 없는 경우 조용히 넘어감
           }
         } catch (e) {
-          console.error("search-keyword 이벤트 처리 오류:", e)
+          // 이벤트 처리 오류가 발생해도 조용히 넘어감
         }
       })
     } catch (e) {
-      console.error("Error setting up search-keyword listener:", e)
+      // 검색 키워드 리스너 설정 오류 처리
     }
 
     // 2. 추가: activation-complete 이벤트 리스닝
@@ -188,8 +182,6 @@
 
         // 이미 URL에 키워드가 있다면, 기존 키워드 처리는 무시
         if (urlKeyword) {
-          console.log("이미 URL에 키워드가 있어 알림 키워드 처리 무시:", urlKeyword)
-
           // 마지막 알림 키워드가 현재 URL과 같으면 제거
           const lastKeyword = localStorage.getItem("lastNotificationKeyword")
           if (lastKeyword === urlKeyword) {
@@ -201,7 +193,6 @@
         // 세션 스토리지에서 먼저 확인
         const pendingKeyword = sessionStorage.getItem("pendingSearchKeyword")
         if (pendingKeyword) {
-          console.log("앱 활성화: 세션 스토리지에서 키워드 발견:", pendingKeyword)
           searchTermFromQuery = pendingKeyword
           isRecommendedSearch = true
           searchAndDisplay(pendingKeyword)
@@ -214,7 +205,6 @@
         // 로컬 스토리지에서 확인
         const lastKeyword = localStorage.getItem("lastNotificationKeyword")
         if (lastKeyword && (!searchTermFromQuery || searchTermFromQuery !== lastKeyword)) {
-          console.log("앱 활성화: 로컬 스토리지에서 키워드 발견:", lastKeyword)
           searchTermFromQuery = lastKeyword
           isRecommendedSearch = true
           searchAndDisplay(lastKeyword)
@@ -224,7 +214,7 @@
         }
       })
     } catch (e) {
-      console.error("Error setting up activation-complete listener:", e)
+      // activation-complete 리스너 설정 중 오류 발생해도 조용히 넘어감
     }
     // START: Add main window event listener (navigation and centering)
     let unlistenNavigate: (() => void) | undefined
@@ -321,7 +311,7 @@
             })
             document.dispatchEvent(toastEvent)
           } catch (e) {
-            console.error("Toast event error:", e)
+            // 토스트 이벤트 에러 가 발생해도 조용히 넘어감
           }
         }
       }, 100)
@@ -351,11 +341,11 @@
           })
           setTimeout(() => document.dispatchEvent(resultToast), 1000)
         } catch (e) {
-          console.error("Result toast error:", e)
+          // 결과 토스트 이벤트 에러 가 발생해도 조용히 넘어감
         }
       }
     } catch (error) {
-      console.error("Error during search:", error)
+      // 검색 중 오류 처리
       mcpCards = []
       pageInfo = { has_next_page: false, end_cursor: null, total_items: 0 }
       allLoaded = true
@@ -372,7 +362,7 @@
           })
           document.dispatchEvent(errorToast)
         } catch (e) {
-          console.error("Error toast error:", e)
+          // 오류 토스트 처리 중 오류 발생시 조용히 넘어감
         }
       }
     } finally {
@@ -400,7 +390,7 @@
         setTimeout(handleScroll, 500)
       }
     } catch (error) {
-      console.error("Error fetching MCP data:", error)
+      // MCP 데이터 가져오는 중 오류 발생
       mcpCards = []
       pageInfo = { has_next_page: false, end_cursor: null, total_items: 0 }
       allLoaded = true

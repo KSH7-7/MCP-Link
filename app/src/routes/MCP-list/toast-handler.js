@@ -32,8 +32,7 @@ export function useNotifications() {
   // 검색 트리거 함수 (컴포넌트에서 구현해야 함)
   function triggerSearch(keyword) {
     // 이 함수는 MCP-list 페이지에서 오버라이드해야 함
-    console.log('검색 트리거:', keyword);
-    // 기본 구현은 콘솔 로그만 표시
+    // 기본 구현은 빈 함수
   }
 
   // 알림 표시 함수 노출

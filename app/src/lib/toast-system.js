@@ -11,7 +11,6 @@ export async function showNotification(title, body, keyword) {
     await invoke('show_notification', { title, body, keyword });
     return true;
   } catch (error) {
-    console.error('알림 표시 실패:', error);
     return false;
   }
 }
@@ -48,7 +47,6 @@ export async function handleUriScheme(uri) {
     // 추가 처리가 필요한 경우 여기에 코드를 추가할 수 있습니다.
     return true;
   } catch (error) {
-    console.error('URI 스킴 처리 실패:', error);
     return false;
   }
 }
@@ -60,8 +58,6 @@ export function initToastSystem() {
     const { message, type, duration, position } = event.detail;
     showToast(message, { type, duration, position });
   });
-  
-  console.log('Toast system initialized');
 }
 
 // 토스트 메시지 표시

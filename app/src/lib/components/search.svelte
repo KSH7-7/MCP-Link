@@ -31,7 +31,6 @@
     // set-search-term 이벤트 리스너 추가 - 알림에서 검색창에 키워드 설정용
     const handleSetSearchTerm = (event: CustomEvent<string>) => {
       if (event?.detail) {
-        console.log("검색창 값 설정:", event.detail);
         searchValue = event.detail;
         
         // 검색창 강조 효과

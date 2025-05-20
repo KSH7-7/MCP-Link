@@ -251,17 +251,13 @@ pub fn run() {
         }))
         .setup(|app| {
             // 알림 시스템 초기화
-            if let Err(e) = init_notification_system(app) {
-                eprintln!("Failed to initialize notification system: {}", e);
-            }
+            let _ = init_notification_system(app);
 
             // Deep Link 리스너 설정
             let app_handle_for_deeplink = app.handle().clone();
 
             // 로그 파일 설정
             let log_path = std::env::temp_dir().join("mcplink_debug.log");
-            let log_path_str = log_path.to_string_lossy().to_string();
-            eprintln!("DEBUG LOG FILE: {}", log_path_str);
 
             // 디버그용 로그 파일에 시작 메시지 기록
             if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -362,7 +358,6 @@ pub fn run() {
                 // 이벤트 페이로드를 문자열로 처리
                 let url = event.payload().to_string();
                 let app_handle = app_handle_for_deeplink.clone();
-                eprintln!("Deep Link received: {}", url);
 
                 // 디버그 로그 파일에 기록
                 if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -381,8 +376,6 @@ pub fn run() {
                 }
 
                 // URL 파싱
-                // URL 파싱 - 더 자세한 디버깅 로그 추가
-                eprintln!("Processing URL: {}", url);
 
                 // 로그 파일에 기록
                 if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -402,7 +395,6 @@ pub fn run() {
 
                 // mcplink 프로토콜 확인 (URL 형식에 따라 검사 방식 조정)
                 if url.contains("mcplink") {
-                    eprintln!("mcplink protocol detected");
 
                     // 로그 파일에 기록
                     if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -421,7 +413,6 @@ pub fn run() {
 
                     // 키워드 추출 - 다양한 URL 형식 처리
                     let keyword = if url.contains("keyword=") {
-                        eprintln!("keyword parameter found");
 
                         // 로그 파일에 기록
                         if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -447,7 +438,6 @@ pub fn run() {
                             } else {
                                 extracted
                             };
-                            eprintln!("Extracted keyword: {}", clean_keyword);
 
                             // 로그 파일에 기록
                             if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -467,7 +457,7 @@ pub fn run() {
 
                             Some(clean_keyword)
                         } else {
-                            eprintln!("Cannot extract keyword from parts");
+                            // 실패 시 로그 파일에 기록
 
                             // 로그 파일에 기록
                             if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -487,7 +477,7 @@ pub fn run() {
                             None
                         }
                     } else {
-                        eprintln!("No keyword parameter found");
+                        // 키워드 파라미터 없음
 
                         // 로그 파일에 기록
                         if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -577,8 +567,7 @@ pub fn run() {
                             }
                         }
                     } else {
-                        // 창을 찾을 수 없는 경우 에러 로그
-                        eprintln!("Failed to find main window!");
+                        // 창을 찾을 수 없는 경우 로그 파일에 기록
 
                         // 로그 파일에 기록
                         if let Ok(mut file) = std::fs::OpenOptions::new()
