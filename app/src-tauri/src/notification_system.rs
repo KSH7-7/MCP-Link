@@ -93,15 +93,30 @@ pub fn show_windows_notification(
         );
     }
 
-    // 알림 클릭 시 즉시 키워드 파일 생성 - 이 방식은 알림이 표시될 때 미리 키워드 파일을 준비하는 것
+    // 알림이 표시될 때 바로 키워드 파일 생성 (알림 클릭 감시 스레드에서 읽을 수 있게 함)
+    // 원래 알림 클릭 시 URI 스킴으로 처리했어야 하지만 Windows에서 제대로 동작하지 않는 경우를 위한 대책
     if let Some(ref kw) = keyword {
-        // 키워드 파일 경로
-        let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-
         // 알림 클릭 로그 파일 경로
         let click_log_path = std::env::temp_dir().join("mcplink_notification_click.log");
 
-        // 키워드 파일 생성 (알림 클릭 시 read_file 함수가 이를 감지할 수 있도록)
+        // 로그 파일에 기록
+        if let Ok(mut click_file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&click_log_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(
+                click_file,
+                "[{}] 알림과 함께 키워드 설정됨: {}",
+                chrono::Local::now().format("%H:%M:%S"),
+                kw
+            );
+        }
+
+        // 키워드 파일 생성
+        let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
         if let Ok(mut file) = std::fs::File::create(&keyword_path) {
             use std::io::Write;
             let _ = write!(file, "{}", kw);
@@ -433,12 +448,27 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
         }
     }
 
-    // 알림 클릭 감시 스레드 시작 - 무한 루프로 변경
+    // 알림 클릭 감시 스레드 시작 - 키워드 파일 모니터링
     std::thread::spawn(move || {
         // 1초 대기
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(2));
 
-        // 무한 루프로 1초마다 키워드 파일 확인
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(
+                file,
+                "[{}] 감시 스레드 시작: 키워드 파일 모니터링",
+                chrono::Local::now().format("%H:%M:%S")
+            );
+        }
+
+        // 무한 루프로 0.5초마다 키워드 파일 확인
         loop {
             // 키워드 파일 경로
             let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
@@ -463,10 +493,28 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
                             );
                         }
 
-                        // 앱 강제 활성화 시도 - 다중 시도 구현
+                        // 알림 클릭 시 동작 구현 - 앱이 먼저 활성화된 경우 검색 실행
+                        // 1. 먼저 키워드 파일을 삭제하여 중복 처리 방지
+                        let _ = std::fs::remove_file(&keyword_path);
+
+                        // 로그 파일에 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path)
+                        {
+                            use std::io::Write;
+                            let _ = writeln!(
+                                file,
+                                "[{}] 감시 스레드: 키워드 파일 삭제됨 (처리 전)",
+                                chrono::Local::now().format("%H:%M:%S")
+                            );
+                        }
+
+                        // 2. 앱 강제 활성화 시도 - 다중 시도 구현
                         let mut activation_success = false;
-                        for attempt in 1..=5 {
-                            // 시도 횟수 5회로 증가
+                        for attempt in 1..=5 { // 시도 횟수 증가
                             // 로그 시작
                             if let Ok(mut file) = std::fs::OpenOptions::new()
                                 .create(true)
@@ -532,12 +580,15 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
                             }
                         }
 
-                        // 잠시 대기하여 창이 완전히 활성화되도록 함
-                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        // 3. 충분한 시간 대기 (앱 초기화 및 활성화 완료를 기다림)
+                        std::thread::sleep(std::time::Duration::from_millis(1500));
 
-                        // 창 조작 단계적 적용 (최대 3회 시도)
+                        // 4. 창 조작 시도
+                        let mut window_found = false;
                         for window_attempt in 1..=3 {
                             if let Some(window) = app_handle.get_webview_window("main") {
+                                window_found = true;
+                                
                                 // 로그 파일에 기록
                                 if let Ok(mut file) = std::fs::OpenOptions::new()
                                     .create(true)
@@ -573,8 +624,6 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
                                         chrono::Local::now().format("%H:%M:%S")
                                     );
                                 }
-
-                                // 창을 찾았으므로 반복 종료
                                 break;
                             } else {
                                 // 창을 찾지 못한 경우
@@ -593,40 +642,41 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
                                     );
                                 }
 
-                                // 다음 시도 전 잠시 대기
-                                if window_attempt < 3 {
-                                    std::thread::sleep(std::time::Duration::from_millis(200));
-                                }
+                                // 다음 시도 전 잠시 대기 
+                                std::thread::sleep(std::time::Duration::from_millis(500));
                             }
                         }
 
-                        // 마지막으로 키워드 이벤트 발생
-                        if let Some(window) = app_handle.get_webview_window("main") {
-                            // 창이 완전히 초기화될 시간을 충분히 제공
-                            std::thread::sleep(std::time::Duration::from_millis(700));
+                        // 추가 대기 시간 (앱이 완전히 UI 렌더링을 마칠 때까지)
+                        std::thread::sleep(std::time::Duration::from_millis(700));
 
-                            let keyword_clone = keyword.clone();
-                            let emit_result = window.emit("search-keyword", keyword_clone);
+                        // 5. 키워드 검색 이벤트 발생
+                        if window_found {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                // 키워드 이벤트 발생 
+                                let keyword_clone = keyword.clone();
+                                let emit_result = window.emit("search-keyword", keyword_clone);
 
-                            // 로그 파일에 기록
-                            if let Ok(mut file) = std::fs::OpenOptions::new()
-                                .create(true)
-                                .write(true)
-                                .append(true)
-                                .open(&log_path)
-                            {
-                                use std::io::Write;
-                                let _ = writeln!(
-                                    file,
-                                    "[{}] 감시 스레드: search-keyword 이벤트 발생: {} (결과: {})",
-                                    chrono::Local::now().format("%H:%M:%S"),
-                                    keyword,
-                                    if emit_result.is_ok() {
-                                        "성공"
-                                    } else {
-                                        "실패"
-                                    }
-                                );
+                                // 로그 파일에 기록
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path)
+                                {
+                                    use std::io::Write;
+                                    let _ = writeln!(
+                                        file,
+                                        "[{}] 감시 스레드: search-keyword 이벤트 발생: {} (결과: {})",
+                                        chrono::Local::now().format("%H:%M:%S"),
+                                        keyword,
+                                        if emit_result.is_ok() {
+                                            "성공"
+                                        } else {
+                                            "실패"
+                                        }
+                                    );
+                                }
                             }
                         } else {
                             // 창을 찾지 못한 경우
@@ -639,35 +689,17 @@ pub fn init_notification_system<R: Runtime>(app: &mut tauri::App<R>) -> Result<(
                                 use std::io::Write;
                                 let _ = writeln!(
                                     file,
-                                    "[{}] 감시 스레드: 창을 찾을 수 없어 이벤트 발생 실패",
+                                    "[{}] 감시 스레드: 창을 찾을 수 없어 키워드 이벤트 발생 실패",
                                     chrono::Local::now().format("%H:%M:%S")
                                 );
                             }
-                        }
-
-                        // 키워드 파일 삭제
-                        let _ = std::fs::remove_file(&keyword_path);
-
-                        // 로그 파일에 기록
-                        if let Ok(mut file) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .append(true)
-                            .open(&log_path)
-                        {
-                            use std::io::Write;
-                            let _ = writeln!(
-                                file,
-                                "[{}] 감시 스레드: 키워드 파일 삭제됨",
-                                chrono::Local::now().format("%H:%M:%S")
-                            );
                         }
                     }
                 }
             }
 
-            // 1초 대기 후 다시 시도
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            // 0.5초 대기 후 다시 시도 (더 빠른 응답을 위해)
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
     });
 

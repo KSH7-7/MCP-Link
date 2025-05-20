@@ -79,8 +79,8 @@ async fn handle_recommendations(
             let keywords_str = payload.keywords.join(", ");
 
             // 알림 제목과 내용 설정
-            let title = "MCP 키워드 추천";
-            let body = format!("검색어: {}", keywords_str);
+            let title = "MCP keyword recommendation";
+            let body = format!("Click for keyword: {}", keywords_str);
 
             // 네이티브 알림 표시 시도
             #[cfg(target_os = "windows")]
@@ -743,6 +743,7 @@ pub fn run() {
             commands::test_force_activate,
             commands::test_search_keyword,
             commands::simulate_notification_click,
+            commands::check_and_mark_app_activated,
             notification_system::show_notification,
         ])
         .run(tauri::generate_context!())

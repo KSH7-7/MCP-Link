@@ -1480,7 +1480,9 @@ pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<()
     let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
     if let Ok(mut file) = std::fs::File::create(&keyword_path) {
         use std::io::Write;
-        let _ = write!(file, "{}", keyword);
+        if let Err(e) = write!(file, "{}", keyword) {
+            return Err(format!("키워드 파일 작성 오류: {}", e));
+        }
 
         // 로그 파일에 기록
         if let Ok(mut log_file) = std::fs::OpenOptions::new()
@@ -1500,6 +1502,8 @@ pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<()
                     .as_secs()
             );
         }
+    } else {
+        return Err("키워드 파일을 생성할 수 없습니다".to_string());
     }
 
     // 앱 강제 활성화 시도 - 결과에 관계없이 성공 반환 (감시 스레드가 처리할 것임)
