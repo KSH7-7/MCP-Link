@@ -39,8 +39,8 @@
   let unlistenNavigateTo: UnlistenFn | undefined
   let unlistenConfigFiles: UnlistenFn | undefined
   let unlistenFocusChange: UnlistenFn | undefined
-  let unlistenSearchKeyword: UnlistenFn | undefined // 새로운 search-keyword-event 리스너를 위한 변수
-  let unlistenSearchKeywordEvent: UnlistenFn | undefined // search-keyword 이벤트 리스너 추가
+  let unlistenSearchKeyword: UnlistenFn | undefined
+  let unlistenSearchKeywordEvent: UnlistenFn | undefined
 
   // --- Svelte reactive state ---
   let activeTabPath = "/"
@@ -51,7 +51,7 @@
   // Handles notification clicks or automatic activation events
   async function handleAppActivated() {
     try {
-      const response = await invoke<any>("check_and_mark_app_activated", {}) // 타입을 any로 변경 또는 구체적인 타입 지정
+      const response = await invoke<any>("check_and_mark_app_activated", {})
 
       // Extract keyword from the response
       let keyword = null
@@ -59,13 +59,13 @@
       // Handle differently based on data type (to accommodate various ways Rust's Option<String> is converted to JSON)
       if (response && typeof response === "object") {
         if (Object.prototype.hasOwnProperty.call(response, "Some")) {
-          // 안전한 접근으로 변경
+          // change to safe access
           // Handle Rust's Option<String>::Some
-          keyword = (response as { Some: string | null }).Some // 타입 단언 추가
+          keyword = (response as { Some: string | null }).Some
         } else if (Object.prototype.hasOwnProperty.call(response, "0")) {
-          // 안전한 접근으로 변경
+          // change to safe access
           // Handle if converted to an array
-          keyword = (response as Array<string | null>)[0] // 타입 단언 추가
+          keyword = (response as Array<string | null>)[0]
         }
       } else if (response && typeof response === "string" && response.trim() !== "") {
         // If converted directly to a string
@@ -73,7 +73,7 @@
       }
 
       if (keyword) {
-        // 키워드가 있으면 검색 실행 함수 호출
+        // If keyword exists, call search execution function
         handleKeywordSearch(keyword)
       } else {
       }
@@ -82,7 +82,7 @@
     }
   }
 
-  // 검색 키워드 처리 함수 분리
+  // Keyword search processing function
   async function handleKeywordSearch(keyword: string) {
     if (!keyword || typeof keyword !== "string" || !keyword.trim()) {
       return
@@ -126,7 +126,7 @@
             setTimeout(async () => {
               try {
                 if (tauriWindow) {
-                  // Null 체크 추가
+                  // Add null check
                   await tauriWindow.setAlwaysOnTop(false)
                 }
               } catch (e) {
@@ -161,12 +161,9 @@
 
   // --- Lifecycle and Subscriptions ---
   onMount(async () => {
-    // 개선된 토스트 시스템 초기화
+    // Initialize toast system
     if (browser) {
       initToastSystem()
-
-      // URI 스킴 프로토콜 핸들러는 deep-link 플러그인으로 대체됨
-      // 이벤트 리스너로 처리하는 방식으로 변경
 
       unlistenSearchKeyword = await listen("search-keyword-event", async (event) => {
         const keyword = event.payload as string
@@ -179,16 +176,6 @@
 
         await handleKeywordSearch(keyword)
       })
-
-      // 테스트 토스트 알림 (개발 환경에서만)
-      if (import.meta.env.DEV) {
-        setTimeout(() => {
-          showToast("토스트 시스템이 성공적으로 초기화되었습니다.", {
-            title: "알림 시스템 초기화",
-            type: "success",
-          })
-        }, 1000)
-      }
     }
     activeTabPath = $page.url.pathname
 
@@ -264,7 +251,7 @@
               if (currentPath === "/first-install") return
 
               // Extract which files are missing from the event payload
-              const payload = event.payload as { claudeConfigExists?: boolean; mcplinkConfigExists?: boolean } // 타입 단언 추가
+              const payload = event.payload as { claudeConfigExists?: boolean; mcplinkConfigExists?: boolean }
               const { claudeConfigExists, mcplinkConfigExists } = payload
 
               // If any config file is missing, redirect to first-install page
@@ -295,8 +282,8 @@
     if (unlistenNavigateTo) unlistenNavigateTo()
     if (unlistenConfigFiles) unlistenConfigFiles()
     if (unlistenFocusChange) unlistenFocusChange()
-    if (unlistenSearchKeyword) unlistenSearchKeyword() // 리스너 해제
-    if (unlistenSearchKeywordEvent) unlistenSearchKeywordEvent() // 리스너 해제
+    if (unlistenSearchKeyword) unlistenSearchKeyword()
+    if (unlistenSearchKeywordEvent) unlistenSearchKeywordEvent()
   })
 
   // --- Window control functions ---

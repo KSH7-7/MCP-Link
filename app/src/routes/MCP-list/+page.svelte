@@ -57,7 +57,6 @@
         allLoaded = true
       }
     } catch (error) {
-      // 오류가 발생하면 조용히 실패
     } finally {
       loadingMore = false
     }
@@ -84,105 +83,98 @@
 
   // get data when component is mounted
   onMount(() => {
-    // 세션 스토리지에서 알림 키워드 확인 (일회성 처리)
+    // Check pending keyword in session storage (one-time processing)
     const pendingKeyword = sessionStorage.getItem("pendingSearchKeyword")
     if (pendingKeyword) {
       searchTermFromQuery = pendingKeyword
       isRecommendedSearch = true
 
-      // 페이지 로드 시 자동 검색 실행
+      // Execute automatic search when page loads
       setTimeout(() => {
         searchAndDisplay(pendingKeyword)
       }, 300)
 
-      // 사용한 키워드는 세션 스토리지에서 제거
+      // Remove used keyword from session storage
       sessionStorage.removeItem("pendingSearchKeyword")
 
-      // 마지막 알림 키워드도 제거 (페이지 새로고침에서 재사용 방지)
+      // Remove last notification keyword (prevent reuse on page refresh)
       localStorage.removeItem("lastNotificationKeyword")
     } else {
-      // URL 파라미터에서 키워드를 확인
+      // Check keyword from URL parameters
       const urlParams = new URLSearchParams(window.location.search)
       const urlKeyword = urlParams.get("keyword")
 
-      // URL에 키워드가 있으면 마지막 키워드 검사는 건너뜀
+      // If there is a keyword in the URL, skip last keyword check
       if (urlKeyword) {
-        // 마지막 알림 키워드가 URL에 있는 키워드와 같으면 제거
+        // If the last notification keyword is the same as the keyword in the URL, remove it
         if (localStorage.getItem("lastNotificationKeyword") === urlKeyword) {
           localStorage.removeItem("lastNotificationKeyword")
         }
         return
       }
 
-      // 로컬 스토리지에서 마지막 알림 키워드 확인 (백업 처리)
+      // Check last notification keyword in local storage (backup processing)
       const lastKeyword = localStorage.getItem("lastNotificationKeyword")
       if (lastKeyword && !pendingKeyword && !searchTermFromQuery) {
         searchTermFromQuery = lastKeyword
         isRecommendedSearch = true
 
-        // 페이지 로드 시 자동 검색 실행
+        // Execute automatic search when page loads
         setTimeout(() => {
           searchAndDisplay(lastKeyword)
-          // 사용 후 키워드 제거 (재사용 방지)
+          // Remove used keyword after use (prevent reuse)
           localStorage.removeItem("lastNotificationKeyword")
         }, 300)
       }
     }
 
-    // 1. 추가: search-keyword 이벤트 리스닝
+    // 1. Additional: search-keyword event listener
     try {
       // @ts-ignore
       window.__TAURI__.event.listen("search-keyword", (event) => {
         try {
-          // 키워드 추출 (문자열이나 객체 형태에 대응)
+          // Extract keyword (handle both string or object form)
           const keyword =
             typeof event.payload === "string"
-              ? event.payload // 이미 문자열이면 그대로 사용
+              ? event.payload // If already a string, use it directly
               : typeof event.payload === "object" && event.payload && event.payload.keyword
-                ? event.payload.keyword // 객체에서 keyword 속성 추출
+                ? event.payload.keyword // Extract keyword from object
                 : null
 
           if (keyword) {
-            // 1. 검색창에 키워드 설정 (set-search-term 이벤트 발생)
+            // 1. Set keyword in search bar (trigger set-search-term event)
             try {
-              // 검색창에 키워드 설정
+              // Set keyword in search bar
               const searchEvent = new CustomEvent("set-search-term", { detail: keyword })
               document.dispatchEvent(searchEvent)
 
-              // 2. 검색 상태 업데이트 (URL은 업데이트하지 않고 시각적으로만 검색 상태 표시)
+              // 2. Update search status (do not update URL, only show search status visually)
               searchTermFromQuery = keyword
               isRecommendedSearch = true
 
-              // 3. 검색 실행 - 검색창에 키워드가 표시된 후 약간 지연시켜 검색 실행
+              // 3. Execute search - delay a little after keyword appears in search bar
               setTimeout(() => {
                 searchAndDisplay(keyword)
               }, 200)
-            } catch (e) {
-              // 검색창 키워드 설정 중 오류가 발생해도 조용히 넘어감
-            }
+            } catch (e) {}
           } else {
-            // 키워드를 찾을 수 없는 경우 조용히 넘어감
           }
-        } catch (e) {
-          // 이벤트 처리 오류가 발생해도 조용히 넘어감
-        }
+        } catch (e) {}
       })
-    } catch (e) {
-      // 검색 키워드 리스너 설정 오류 처리
-    }
+    } catch (e) {}
 
-    // 2. 추가: activation-complete 이벤트 리스닝
+    // 2. Additional: activation-complete event listener
     try {
       // @ts-ignore
       window.__TAURI__.event.listen("activation-complete", () => {
-        // 앱이 활성화되었을 때 추가 조치
-        // URL 파라미터로 키워드가 있는지 확인
+        // Additional actions when the app is activated
+        // Check if there is a keyword in the URL parameters
         const urlParams = new URLSearchParams(window.location.search)
         const urlKeyword = urlParams.get("keyword")
 
-        // 이미 URL에 키워드가 있다면, 기존 키워드 처리는 무시
+        // If there is already a keyword in the URL, ignore existing keyword processing
         if (urlKeyword) {
-          // 마지막 알림 키워드가 현재 URL과 같으면 제거
+          // If the last notification keyword is the same as the keyword in the URL, remove it
           const lastKeyword = localStorage.getItem("lastNotificationKeyword")
           if (lastKeyword === urlKeyword) {
             localStorage.removeItem("lastNotificationKeyword")
@@ -190,32 +182,30 @@
           return
         }
 
-        // 세션 스토리지에서 먼저 확인
+        // Check session storage first
         const pendingKeyword = sessionStorage.getItem("pendingSearchKeyword")
         if (pendingKeyword) {
           searchTermFromQuery = pendingKeyword
           isRecommendedSearch = true
           searchAndDisplay(pendingKeyword)
 
-          // 사용 후 제거
+          // Remove used keyword after use
           sessionStorage.removeItem("pendingSearchKeyword")
           return
         }
 
-        // 로컬 스토리지에서 확인
+        // Check local storage
         const lastKeyword = localStorage.getItem("lastNotificationKeyword")
         if (lastKeyword && (!searchTermFromQuery || searchTermFromQuery !== lastKeyword)) {
           searchTermFromQuery = lastKeyword
           isRecommendedSearch = true
           searchAndDisplay(lastKeyword)
 
-          // 사용 후 제거
+          // Remove used keyword after use
           localStorage.removeItem("lastNotificationKeyword")
         }
       })
-    } catch (e) {
-      // activation-complete 리스너 설정 중 오류 발생해도 조용히 넘어감
-    }
+    } catch (e) {}
     // START: Add main window event listener (navigation and centering)
     let unlistenNavigate: (() => void) | undefined
     listen("navigate-to-mcp-list-with-keyword", async (event) => {
@@ -284,9 +274,9 @@
       return fetchAllMCPs() // Load all if term is empty
     }
 
-    // 키워드를 검색창에도 설정 (사용자 피드백용)
+    // Set keyword in search bar (for user feedback)
     try {
-      // 이벤트 발생
+      // Trigger event
       const searchEvent = new CustomEvent("set-search-term", { detail: term })
       document.dispatchEvent(searchEvent)
     } catch (e) {
@@ -297,11 +287,11 @@
     loading = true
     allLoaded = false // Reset allLoaded when loading new data
     try {
-      // 알림이 처리되었음을 사용자에게 표시 (타이밍 잠깐 지연)
+      // Show user that notification has been processed (delay a little)
       setTimeout(() => {
         if (isRecommendedSearch) {
           try {
-            // 토스트 메시지 표시
+            // Show toast message
             const toastEvent = new CustomEvent("show-toast", {
               detail: {
                 message: `'${term}' 키워드로 검색중..`,
@@ -310,9 +300,7 @@
               },
             })
             document.dispatchEvent(toastEvent)
-          } catch (e) {
-            // 토스트 이벤트 에러 가 발생해도 조용히 넘어감
-          }
+          } catch (e) {}
         }
       }, 100)
 
@@ -328,10 +316,10 @@
         setTimeout(handleScroll, 500)
       }
 
-      // 검색 결과 표시
+      // Display search results
       if (isRecommendedSearch) {
         try {
-          // 결과 토스트 메시지
+          // Result toast message
           const resultToast = new CustomEvent("show-toast", {
             detail: {
               message: `'${term}' 키워드 검색 결과: ${mcpCards.length}개 발견`,
@@ -340,17 +328,15 @@
             },
           })
           setTimeout(() => document.dispatchEvent(resultToast), 1000)
-        } catch (e) {
-          // 결과 토스트 이벤트 에러 가 발생해도 조용히 넘어감
-        }
+        } catch (e) {}
       }
     } catch (error) {
-      // 검색 중 오류 처리
+      // Handle search error
       mcpCards = []
       pageInfo = { has_next_page: false, end_cursor: null, total_items: 0 }
       allLoaded = true
 
-      // 검색 오류 표시
+      // Display search error
       if (isRecommendedSearch) {
         try {
           const errorToast = new CustomEvent("show-toast", {
@@ -361,9 +347,7 @@
             },
           })
           document.dispatchEvent(errorToast)
-        } catch (e) {
-          // 오류 토스트 처리 중 오류 발생시 조용히 넘어감
-        }
+        } catch (e) {}
       }
     } finally {
       loading = false
@@ -390,7 +374,7 @@
         setTimeout(handleScroll, 500)
       }
     } catch (error) {
-      // MCP 데이터 가져오는 중 오류 발생
+      // Error occurred while fetching MCP data
       mcpCards = []
       pageInfo = { has_next_page: false, end_cursor: null, total_items: 0 }
       allLoaded = true

@@ -12,20 +12,18 @@
   let unlistenKeywords: (() => void) | null = null
   let unlistenBasicNavigate: (() => void) | null = null
 
-  // 알림에서 검색 실행 함수
+  // Search execution function from notification
   function executeSearch(keyword: string) {
     if (!keyword) {
       return
     }
 
-    // URL 업데이트
+    // URL update
     try {
       goto(`/MCP-list?keyword=${encodeURIComponent(keyword)}`, { replaceState: false })
-    } catch (e) {
-      // 실패시 조용히 실패
-    }
+    } catch (e) {}
 
-    // 토스트 메시지 표시 (사용자 피드백)
+    // Show toast message (user feedback)
     try {
       const toastEvent = new CustomEvent("show-toast", {
         detail: {
@@ -35,13 +33,11 @@
         },
       })
       document.dispatchEvent(toastEvent)
-    } catch (e) {
-      // 실패시 조용히 실패
-    }
+    } catch (e) {}
 
-    // 키워드 로컬 스토리지에 저장 (앱 다시 시작 시 사용)
-    // 중요: 현재 페이지가 이미 MCP-list이고 키워드가 URL에 있다면 저장하지 않음
-    // 이미 검색을 실행 중인 경우를 고려
+    // Save keyword to local storage (used when app restarts)
+    // Important: Do not save if the current page is already MCP-list and the keyword is in the URL
+    // Consider already running search
     if (window.location.pathname === "/MCP-list") {
       const urlParams = new URLSearchParams(window.location.search)
       const urlKeyword = urlParams.get("keyword")
@@ -50,10 +46,10 @@
       }
     }
 
-    // 세션 스토리지에 저장 (현재 세션에서만 유효하도록)
+    // Save to session storage (valid only for current session)
     sessionStorage.setItem("pendingSearchKeyword", keyword)
 
-    // 로컬 스토리지에도 백업으로 저장 (타임스탬프도 함께 저장)
+    // Also save to local storage as a backup (with timestamp)
     const keywordData = {
       keyword: keyword,
       timestamp: Date.now(),
@@ -63,9 +59,9 @@
   }
 
   onMount(async () => {
-    // 이벤트 리스너 설정
+    // Set event listeners
     try {
-      // navigate-to-mcp-list-with-keyword 이벤트 리스너
+      // navigate-to-mcp-list-with-keyword event listener
       unlistenNavigate = await listen("navigate-to-mcp-list-with-keyword", (event) => {
         const payload = event.payload
 
@@ -79,7 +75,7 @@
         }
       })
 
-      // navigate-to 이벤트 리스너 (기본 탐색용)
+      // navigate-to event listener (for basic navigation)
       const unlistenBasicNavigate = await listen("navigate-to", (event) => {
         const payload = event.payload
 
@@ -93,23 +89,23 @@
             }
           }
 
-          // 키워드가 없으면 일반 탐색
+          // If there is no keyword, perform general navigation
           goto(payload)
         }
       })
 
-      // new-keywords 이벤트 리스너
+      // new-keywords event listener
       unlistenKeywords = await listen("new-keywords", (event) => {
         const keywords = event.payload
 
         if (Array.isArray(keywords) && keywords.length > 0) {
-          // 첫 번째 키워드 사용
+          // Use the first keyword
           executeSearch(keywords[0])
         } else {
         }
       })
 
-      // URI 스킴 처리 리스너 설정
+      // URI scheme processing listener
       window.addEventListener("DOMContentLoaded", () => {
         const uri = localStorage.getItem("pendingUriScheme")
 
@@ -127,7 +123,7 @@
         }
       })
 
-      // 이미 DOM이 로드된 경우를 위한 체크
+      // Check if DOM is already loaded
       if (document.readyState === "complete") {
         const uri = localStorage.getItem("pendingUriScheme")
         if (uri) {
@@ -142,12 +138,11 @@
           }
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   })
 
   onDestroy(() => {
-    // 리스너 정리
+    // Clean up listeners
     if (unlistenNavigate) {
       unlistenNavigate()
     }
@@ -160,4 +155,4 @@
   })
 </script>
 
-<!-- 이 컴포넌트는 UI가 없고 이벤트 처리만 담당합니다 -->
+<!-- This component only handles event processing and has no UI -->
