@@ -59,17 +59,16 @@
 
   // wheel 이벤트 리스너 설정을 위한 reactive 블록
   $: if (mainElement && browser) {
-    setContext(scrollableContainerKey, mainElement);
+    setContext(scrollableContainerKey, mainElement)
     // wheel 이벤트 리스너 추가
-    mainElement.addEventListener('wheel', handleWheel, { passive: true });
-    mainElement.addEventListener('touchstart', handleWheel, { passive: true });
+    mainElement.addEventListener("wheel", handleWheel, { passive: true })
+    mainElement.addEventListener("touchstart", handleWheel, { passive: true })
   }
 
   // Notification activation handler - called when the app gains focus
   // Handles notification clicks or automatic activation events
   async function handleAppActivated() {
     try {
-
       const response = await invoke<any>("check_and_mark_app_activated", {}) // 타입을 any로 변경 또는 구체적인 타입 지정
 
       // Extract keyword from the response
@@ -110,7 +109,7 @@
     try {
       // 스크롤 위치를 즉시 상단으로 애니메이션 적용
       if (mainElement) {
-        smoothScrollToTop();
+        smoothScrollToTop()
       }
 
       // Additional action to ensure the app is actually activated
@@ -193,30 +192,30 @@
     // 개선된 토스트 시스템 초기화
     if (browser) {
       initToastSystem()
-      
+
       // 단순화된 이벤트 리스너 - 활성 탭 경로만 업데이트
-      window.addEventListener('navigate-to-event', ((event: CustomEvent) => {
+      window.addEventListener("navigate-to-event", ((event: CustomEvent) => {
         if (event.detail && event.detail.path) {
           // 이벤트로 받은 활성 탭 경로 설정
-          activeTabPath = event.detail.path;
+          activeTabPath = event.detail.path
         }
-      }) as EventListener);
-      
+      }) as EventListener)
+
       // 데이터 스토어 초기화
       setLoaded(false)
-      
+
       // 페이지 전환 간에 공유될 데이터 로드
       try {
         // 여기서 앱에 필요한 공통 데이터를 로드
         // 예: 설치된 MCP 수, MCP 리스트 수 등의 데이터
-        
+
         // 예시 데이터 로드 (실제로는 invoke 등을 통해 데이터를 가져와야 함)
         const installedCount = await invoke("get_installed_count").catch(() => 0)
         const listCount = await invoke("get_list_count").catch(() => 0)
-        
+
         updateCount("installedCount", installedCount as number)
         updateCount("listCount", listCount as number)
-        
+
         // 데이터 로드 완료 표시
         setLoaded(true)
       } catch (error) {
@@ -237,16 +236,6 @@
         const keyword = event.payload as string
         await handleKeywordSearch(keyword)
       })
-
-      // 테스트 토스트 알림 (개발 환경에서만)
-      if (import.meta.env.DEV) {
-        setTimeout(() => {
-          showToast("토스트 시스템이 성공적으로 초기화되었습니다.", {
-            title: "알림 시스템 초기화",
-            type: "success",
-          })
-        }, 1000)
-      }
     }
     activeTabPath = $page.url.pathname
 
@@ -289,12 +278,10 @@
       try {
         tauriWindow = WebviewWindow.getCurrent()
 
-
         // Set up event listeners
         unlistenMoveToCenter = await listen("move-main-to-center", async () => {
           // This event should not be triggered anymore
           // We no longer automatically center the window
-
         })
 
         unlistenNavigateTo = await listen("navigate-to", async (event) => {
@@ -362,19 +349,19 @@
     if (unlistenFocusChange) unlistenFocusChange()
     if (unlistenSearchKeyword) unlistenSearchKeyword() // 리스너 해제
     if (unlistenSearchKeywordEvent) unlistenSearchKeywordEvent() // 리스너 해제
-    
+
     // 진행 중인 스크롤 애니메이션이 있다면 중단
     if (currentScrollAnimation) {
-      currentScrollAnimation.kill();
-      currentScrollAnimation = null;
+      currentScrollAnimation.kill()
+      currentScrollAnimation = null
     }
-    
+
     // wheel 및 touch 이벤트 리스너 제거
     if (browser && mainElement) {
-      mainElement.removeEventListener('wheel', handleWheel);
-      mainElement.removeEventListener('touchstart', handleWheel);
+      mainElement.removeEventListener("wheel", handleWheel)
+      mainElement.removeEventListener("touchstart", handleWheel)
     }
-    
+
     // 커스텀 이벤트 리스너 제거
     if (browser) {
       // 이벤트 리스너 제거 시 빈 함수로 제거하면 실제로 제거되지 않음
@@ -384,21 +371,20 @@
   })
 
   // 진행 중인 스크롤 애니메이션 참조를 저장할 변수
-  let currentScrollAnimation: gsap.core.Tween | null = null;
-  
+  let currentScrollAnimation: gsap.core.Tween | null = null
+
   // 스크롤 위치를 확인하고 스크롤 애니메이션을 실행하는 함수
   function smoothScrollToTop() {
-    if (!mainElement) return;
-    
+    if (!mainElement) return
+
     // 현재 스크롤 위치가 1픽셀 이상인 경우에만 애니메이션 적용
     if (mainElement.scrollTop > 1) {
-      
       // 이미 진행 중인 애니메이션이 있으면 중단
       if (currentScrollAnimation) {
-        currentScrollAnimation.kill();
-        currentScrollAnimation = null;
+        currentScrollAnimation.kill()
+        currentScrollAnimation = null
       }
-      
+
       // GSAP을 사용하여 부드러운 스크롤 애니메이션 적용
       currentScrollAnimation = gsap.to(mainElement, {
         scrollTop: 0,
@@ -406,17 +392,17 @@
         ease: "power2.out", // 가속도 곡선 (easing)
         onComplete: () => {
           // 애니메이션 완료 시 참조 제거
-          currentScrollAnimation = null;
-        }
-      });
+          currentScrollAnimation = null
+        },
+      })
     }
   }
-  
+
   // 마우스 휠 이벤트 시 애니메이션 중단 함수
   function handleWheel() {
     if (currentScrollAnimation) {
-      currentScrollAnimation.kill();
-      currentScrollAnimation = null;
+      currentScrollAnimation.kill()
+      currentScrollAnimation = null
     }
   }
 
@@ -436,7 +422,7 @@
   // --- Reactive computations for styling ---
   $: currentActivePageConfig = (() => {
     if (activeTabPath === settingsTab.path) return settingsTab
-    
+
     // 정확히 일치하는 탭 찾기
     const foundTab = tabs.find((t) => activeTabPath === t.path)
     return foundTab || tabs.find((t) => t.path === "/Installed-MCP") || tabs[0] // 기본값
@@ -507,10 +493,10 @@
               "
               on:click|preventDefault={() => {
                 // 탭 클릭 시 다른 모든 탭의 활성화 상태를 초기화하고 현재 탭만 활성화
-                activeTabPath = tab.path;
+                activeTabPath = tab.path
                 // 부드러운 스크롤 애니메이션 적용
-                smoothScrollToTop();
-                goto(tab.path);
+                smoothScrollToTop()
+                goto(tab.path)
               }}
             >
               <div class="flex items-center justify-center">
@@ -533,10 +519,10 @@
             "
             on:click|preventDefault={() => {
               // 설정 탭 클릭 시 모든 탭 초기화하고 설정 탭만 활성화
-              activeTabPath = settingsTab.path;
+              activeTabPath = settingsTab.path
               // 부드러운 스크롤 애니메이션 적용
-              smoothScrollToTop();
-              goto(settingsTab.path);
+              smoothScrollToTop()
+              goto(settingsTab.path)
             }}
           >
             <div class="flex items-center justify-center">
@@ -584,7 +570,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.2s, color 0.2s, opacity 0.2s, font-weight 0.2s;
+    transition:
+      background-color 0.2s,
+      color 0.2s,
+      opacity 0.2s,
+      font-weight 0.2s;
   }
 
   /* Custom scrollbar styles to make them more contained within the main content */
