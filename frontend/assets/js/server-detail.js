@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper function to format large numbers (k/M)
     function formatNumber(num) {
-        if (num === undefined || num === null) return 'N/A';
+        if (num === undefined || num === null) return translate('notAvailable') || 'N/A';
         if (num >= 1000000) {
             return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
         }
@@ -70,20 +70,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Populate basic info
             elements.url.href = serverData.url || '#';
-            elements.url.textContent = serverData.url ? serverData.url.replace(/^https?:\/\/(www\.)?/, '') : 'N/A';
+            elements.url.textContent = serverData.url ? serverData.url.replace(/^https?:\/\/(www\.)?/, '') : translate('notAvailable') || 'N/A';
             elements.stars.textContent = formatNumber(serverData.stars);
             elements.views.textContent = formatNumber(serverData.views);
             elements.official.innerHTML = formatBooleanIcon(serverData.official, translate('officialServer') || '공식', translate('unofficialServer') || '비공식');
-            // HTML에는 "검사 완료"로 되어있으나 API의 scanned는 검사 여부를 뜻하므로, 툴팁을 적절히 수정
+            // HTML에는 "검사 완료"로 되어있으나 API의 scanned는 검사 여부를 뜻하므로, 툴크을 적절히 수정
             elements.scanned.innerHTML = formatBooleanIcon(serverData.scanned, translate('scannedPass') || '검사 통과', translate('scannedFailOrNotYet') || '검사 미통과/미실시');
-            elements.securityRank.textContent = serverData.securityRank || 'N/A';
-            elements.type.textContent = serverData.type || 'N/A';
+            elements.securityRank.textContent = serverData.securityRank || translate('notAvailable') || 'N/A';
+            elements.type.textContent = serverData.type || translate('notAvailable') || 'N/A';
             
             // Populate description
-            elements.description.textContent = serverData.mcpServer?.description || 'N/A';
+            elements.description.textContent = serverData.mcpServer?.description || translate('notAvailable') || 'N/A';
 
             // Populate execution info
-            elements.command.textContent = serverData.mcpServer?.command || 'N/A';
+            elements.command.textContent = serverData.mcpServer?.command || translate('notAvailable') || 'N/A';
 
             elements.args.innerHTML = ''; // Clear default
             if (serverData.mcpServer?.args && serverData.mcpServer.args.length > 0) {
@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } else {
                 const li = document.createElement('li');
-                li.textContent = 'N/A';
+                li.textContent = translate('notAvailable') || 'N/A';
                 elements.args.appendChild(li);
             }
 
@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 const li = document.createElement('li');
-                li.textContent = 'N/A';
+                li.textContent = translate('notAvailable') || 'N/A';
                 elements.env.appendChild(li);
             }
 
