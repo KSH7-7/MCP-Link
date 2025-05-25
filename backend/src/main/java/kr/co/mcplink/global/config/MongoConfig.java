@@ -1,17 +1,16 @@
 package kr.co.mcplink.global.config;
 
+import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
-import com.mongodb.MongoCredential;
-import com.mongodb.ServerAddress;
+import com.mongodb.ServerApi;
+import com.mongodb.ServerApiVersion;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
-import org.springframework.data.convert.Jsr310Converters;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.data.convert.Jsr310Converters;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
@@ -26,85 +25,52 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
 
 @Configuration
-@EnableMongoAuditing 
+@EnableMongoAuditing
 @EnableMongoRepositories(
-    basePackages = {
-            "kr.co.mcplink.domain.mcpserver.v1.repository",
-            "kr.co.mcplink.domain.mcpserver.v2.repository",
-            "kr.co.mcplink.domain.mcpserver.v3.repository",
-            "kr.co.mcplink.domain.schedule.v2.repository",
-            "kr.co.mcplink.domain.schedule.v3.repository"
-    },
-    mongoTemplateRef = "mongoTemplate"
+        basePackages = {
+                "kr.co.mcplink.domain.mcpserver.repository",
+                "kr.co.mcplink.domain.schedule.repository"
+        },
+        mongoTemplateRef = "mongoTemplate"
 )
 public class MongoConfig {
 
-    @Value("${spring.data.mongodb.host}")
-    private String host;
+    @Value("${mongodb.atlas.uri}")
+    private String mongoUri;
 
-    @Value("${spring.data.mongodb.port}")
-    private int port;
+    //    @Value("${mongodb.atlas.database}")
+    private final String database = "springlink";
 
-    @Value("${spring.data.mongodb.database}")
-    private String database;
-
-    @Value("${spring.data.mongodb.username}")
-    private String username;
-
-    @Value("${spring.data.mongodb.password}")
-    private String password;
-
-    @Primary
-    @Bean(name = "mongoClient")
+    @Bean
     public MongoClient mongoClient() {
-
-        if (username != null && !username.isEmpty()) {
-            MongoCredential credential = MongoCredential.createCredential(
-                    username, database, password.toCharArray());
-
-            return MongoClients.create(MongoClientSettings.builder()
-                    .applyToClusterSettings(builder ->
-                            builder.hosts(Collections.singletonList(new ServerAddress(host, port))))
-                    .credential(credential)
-                    .build());
-        } else {
-
-            return MongoClients.create(String.format("mongodb://%s:%d", host, port));
-        }
+        MongoClientSettings settings = MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(mongoUri))
+                .serverApi(ServerApi.builder().version(ServerApiVersion.V1).build())
+                .build();
+        return MongoClients.create(settings);
     }
 
-    @Primary
-    @Bean(name = "mongoDatabaseFactory")
-    public MongoDatabaseFactory mongoDatabaseFactory(@Qualifier("mongoClient") MongoClient mongoClient) {
+    @Bean
+    public MongoDatabaseFactory mongoDatabaseFactory(MongoClient mongoClient) {
         return new SimpleMongoClientDatabaseFactory(mongoClient, database);
     }
 
-    @Primary
-    @Bean(name = "mongoTemplate")
-    public MongoTemplate mongoTemplate(
-            @Qualifier("mongoDatabaseFactory") MongoDatabaseFactory mongoDatabaseFactory,
-            MongoMappingContext context) {
-
-        MappingMongoConverter converter = new MappingMongoConverter(
-                new DefaultDbRefResolver(mongoDatabaseFactory), context);
+    @Bean
+    public MongoTemplate mongoTemplate(MongoDatabaseFactory factory, MongoMappingContext context) {
+        MappingMongoConverter converter = new MappingMongoConverter(new DefaultDbRefResolver(factory), context);
         converter.setTypeMapper(new DefaultMongoTypeMapper(null));
 
         Collection<Converter<?, ?>> jsr310Converters = Jsr310Converters.getConvertersToRegister();
-        List<Converter<?, ?>> converterList = new ArrayList<>(jsr310Converters);
-        converter.setCustomConversions(new MongoCustomConversions(converterList));
+        converter.setCustomConversions(new MongoCustomConversions(new ArrayList<>(jsr310Converters)));
         converter.afterPropertiesSet();
 
-        return new MongoTemplate(mongoDatabaseFactory, converter);
+        return new MongoTemplate(factory, converter);
     }
 
-    @Primary
-    @Bean(name = "mongoTransactionManager")
-    public MongoTransactionManager mongoTransactionManager(
-            @Qualifier("mongoDatabaseFactory") MongoDatabaseFactory mongoDatabaseFactory) {
-        return new MongoTransactionManager(mongoDatabaseFactory);
+    @Bean
+    public MongoTransactionManager mongoTransactionManager(MongoDatabaseFactory factory) {
+        return new MongoTransactionManager(factory);
     }
 }

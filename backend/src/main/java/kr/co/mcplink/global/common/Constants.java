@@ -4,23 +4,17 @@ public final class Constants {
 
     // 컬렉션 이름 (MongoDB)
     public static final String COLLECTION_SEQUENCE_COUNTER      = "sequence_counter";
-    public static final String COLLECTION_SYNONYM_MAPPING       = "synonym_mapping";
     public static final String COLLECTION_MCP_SERVERS           = "mcp_servers";
     public static final String COLLECTION_MCP_TAGS              = "mcp_tags";
-    public static final String COLLECTION_MCP_SERVERS_V2        = "mcp_servers_v2";
-    public static final String COLLECTION_MCP_TAGS_V2           = "mcp_tags_v2";
-    public static final String COLLECTION_MCP_SERVERS_V3        = "mcp_servers_v3";
-    public static final String COLLECTION_MCP_TAGS_V3           = "mcp_tags_v3";
     public static final String COLLECTION_GITHUB_PENDING_QUEUE  = "github_pending_queue";
     public static final String COLLECTION_GEMINI_PENDING_QUEUE  = "gemini_pending_queue";
-    public static final String COLLECTION_GITHUB_PENDING_QUEUE_V3   = "github_pending_queue_v3";
-    public static final String COLLECTION_GEMINI_PENDING_QUEUE_V3   = "gemini_pending_queue_v3";
 
     // 인덱스 이름 (MongoDB)
     // stars 내림차순, seq 오름차순 복합 정렬 인덱스
     public static final String IDX_MCP_SERVERS_SORT             = "idx_mcp_servers_stars_desc_seq_asc";
     // name+description 필드에 대한 검색 인덱스
     public static final String IDX_MCP_SERVERS_NAME_SEARCH      = "idx_mcp_servers_name_search";
+    public static final String IDX_MCP_SERVERS_NAME_SEARCH_KR   = "idx_mcp_servers_name_search_kr";
 
     // Github
     public static final String GITHUB_SEARCH_PATH               = "/search/repositories";

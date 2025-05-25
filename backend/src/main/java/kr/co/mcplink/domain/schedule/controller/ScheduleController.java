@@ -1,7 +1,7 @@
-package kr.co.mcplink.domain.schedule.v3.controller;
+package kr.co.mcplink.domain.schedule.controller;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
-import kr.co.mcplink.domain.schedule.v3.service.ScheduleV3Service;
+import kr.co.mcplink.domain.schedule.service.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,9 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v3/schedule")
 @RequiredArgsConstructor
 @Tag(name = "Schedule API v3", description = "⚠️ Do Not Use!! Only For OiPKL!! ⚠️")
-public class ScheduleV3Controller {
+public class ScheduleController {
 
-    private final ScheduleV3Service scheduleService;
+    private final ScheduleService scheduleService;
 
     @PostMapping("/init")
     public void initData() {
@@ -31,5 +31,11 @@ public class ScheduleV3Controller {
     public void updateData() {
 
         scheduleService.updateData();
+    }
+
+    @PostMapping("/update/kr")
+    public void updateKrData() {
+
+        scheduleService.updateKrData();
     }
 }

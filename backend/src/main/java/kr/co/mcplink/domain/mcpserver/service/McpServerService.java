@@ -1,10 +1,10 @@
-package kr.co.mcplink.domain.mcpserver.v3.service;
+package kr.co.mcplink.domain.mcpserver.service;
 
-import kr.co.mcplink.domain.mcpserver.kr.repository.McpServerKrRepository;
-import kr.co.mcplink.domain.mcpserver.v1.dto.*;
-import kr.co.mcplink.domain.mcpserver.v1.dto.response.*;
-import kr.co.mcplink.domain.mcpserver.v3.entity.McpServerV3;
-import kr.co.mcplink.domain.mcpserver.v3.repository.McpTagV3Repository;
+import kr.co.mcplink.domain.mcpserver.dto.*;
+import kr.co.mcplink.domain.mcpserver.dto.response.*;
+import kr.co.mcplink.domain.mcpserver.entity.McpServer;
+import kr.co.mcplink.domain.mcpserver.repository.McpServerRepository;
+import kr.co.mcplink.domain.mcpserver.repository.McpTagRepository;
 import kr.co.mcplink.global.common.ApiResponse;
 import kr.co.mcplink.global.common.Constants;
 import kr.co.mcplink.global.util.PaginationUtil;
@@ -18,19 +18,19 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class McpServerV3Service {
+public class McpServerService {
 
-    private final McpServerKrRepository serverRepository;
-    private final McpTagV3Repository tagRepository;
+    private final McpServerRepository serverRepository;
+    private final McpTagRepository tagRepository;
 
     public ApiResponse<McpListResponse> findAllServers(Integer size, Long cursorId) {
-        List<McpServerV3> servers = serverRepository.listAll(size, cursorId);
+        List<McpServer> servers = serverRepository.listAll(size, cursorId);
 
         long total = serverRepository.countAll();
         long endCursor = servers.isEmpty() ? 0L : servers.get(servers.size() - 1).getSeq();
         long remaining = serverRepository.countRemaining(endCursor);
 
-        PageInfoDto pageInfo = PaginationUtil.buildPageInfoV3(servers, total, remaining);
+        PageInfoDto pageInfo = PaginationUtil.buildPageInfo(servers, total, remaining);
 
         List<McpSummaryDataDto> mcpServers = servers.stream()
                 .map(this::toSummaryDataDto)
@@ -42,13 +42,25 @@ public class McpServerV3Service {
     }
 
     public ApiResponse<McpSearchResponse> searchServersByName(String name, Integer size, Long cursorId) {
-        List<McpServerV3> servers = serverRepository.searchByName(name, size, cursorId);
+        List<McpServer> servers;
 
-        long total = serverRepository.countByName(name);
-        long endCursor = servers.isEmpty() ? 0L : servers.get(servers.size() - 1).getSeq();
-        long remaining = serverRepository.countRemainingByName(name, endCursor);
+        long total;
+        long endCursor;
+        long remaining;
 
-        PageInfoDto pageInfo = PaginationUtil.buildPageInfoV3(servers, total, remaining);
+        if (containsKorean(name)) {
+            servers = serverRepository.searchByNameKr(name, size, cursorId);
+            total = serverRepository.countByNameKr(name);
+            endCursor = servers.isEmpty() ? 0L : servers.get(servers.size() - 1).getSeq();
+            remaining = serverRepository.countRemainingByNameKr(name, endCursor);
+        } else {
+            servers = serverRepository.searchByName(name, size, cursorId);
+            total = serverRepository.countByName(name);
+            endCursor = servers.isEmpty() ? 0L : servers.get(servers.size() - 1).getSeq();
+            remaining = serverRepository.countRemainingByName(name, endCursor);
+        }
+
+        PageInfoDto pageInfo = PaginationUtil.buildPageInfo(servers, total, remaining);
 
         List<McpSummaryDataDto> mcpServers = servers.stream()
                 .map(this::toSummaryDataDto)
@@ -60,10 +72,10 @@ public class McpServerV3Service {
     }
 
     public ApiResponse<McpBatchResponse> findServersByIds(List<Long> seqs, Integer size, Long cursorId) {
-        List<McpServerV3> servers = new ArrayList<>();
+        List<McpServer> servers = new ArrayList<>();
 
         for (Long seq : seqs) {
-            McpServerV3 server = serverRepository.findBySeq(seq).orElse(null);
+            McpServer server = serverRepository.findBySeq(seq).orElse(null);
 
             if(server == null) {
                 return ApiResponse.error(HttpStatus.NOT_FOUND.toString(), Constants.MSG_NOT_FOUNDS);
@@ -73,7 +85,7 @@ public class McpServerV3Service {
         List<Long> pageIds = PaginationUtil.slicePageIdsForBatch(seqs, size, cursorId);
 
         for (Long seq : pageIds) {
-            McpServerV3 server = serverRepository.findBySeq(seq).orElse(null);
+            McpServer server = serverRepository.findBySeq(seq).orElse(null);
             servers.add(server);
         }
 
@@ -90,11 +102,11 @@ public class McpServerV3Service {
 
     public ApiResponse<McpListResponse> findAllServersForWeb(Integer size, Integer page) {
         int offset = PaginationUtil.calculateOffset(size, page);
-        List<McpServerV3> servers = serverRepository.listAllWithOffset(size, offset);
+        List<McpServer> servers = serverRepository.listAllWithOffset(size, offset);
 
         long total = serverRepository.countAll();
 
-        PageInfoDto pageInfo = PaginationUtil.buildPageInfoV3ForWeb(total, size, page);
+        PageInfoDto pageInfo = PaginationUtil.buildPageInfoForWeb(total, size, page);
 
         List<McpSummaryDataDto> mcpServers = servers.stream()
                 .map(this::toSummaryDataDto)
@@ -107,11 +119,19 @@ public class McpServerV3Service {
 
     public ApiResponse<McpSearchResponse> searchServersByNameForWeb(String name, Integer size, Integer page) {
         int offset = PaginationUtil.calculateOffset(size, page);
-        List<McpServerV3> servers = serverRepository.searchByNameWithOffset(name, size, offset);
+        List<McpServer> servers;
 
-        long total = serverRepository.countByName(name);
+        long total;
 
-        PageInfoDto pageInfo = PaginationUtil.buildPageInfoV3ForWeb(total, size, page);
+        if (containsKorean(name)) {
+            servers = serverRepository.searchByNameWithOffsetKr(name, size, offset);
+            total = serverRepository.countByNameKr(name);
+        } else {
+            servers = serverRepository.searchByNameWithOffset(name, size, offset);
+            total = serverRepository.countByName(name);
+        }
+
+        PageInfoDto pageInfo = PaginationUtil.buildPageInfoForWeb(total, size, page);
 
         List<McpSummaryDataDto> mcpServers = servers.stream()
                 .map(this::toSummaryDataDto)
@@ -123,10 +143,10 @@ public class McpServerV3Service {
     }
 
     public ApiResponse<McpBatchResponse> findServersByIdsForWeb(List<Long> seqs, Integer size, Integer page) {
-        List<McpServerV3> servers = new ArrayList<>();
+        List<McpServer> servers = new ArrayList<>();
 
         for (Long seq : seqs) {
-            McpServerV3 server = serverRepository.findBySeq(seq).orElse(null);
+            McpServer server = serverRepository.findBySeq(seq).orElse(null);
 
             if(server == null) {
                 return ApiResponse.error(HttpStatus.NOT_FOUND.toString(), Constants.MSG_NOT_FOUNDS);
@@ -136,7 +156,7 @@ public class McpServerV3Service {
         List<Long> pageIds = PaginationUtil.slicePageIdsForBatchForWeb(seqs, size, page);
 
         for (Long seq : pageIds) {
-            McpServerV3 server = serverRepository.findBySeq(seq).orElse(null);
+            McpServer server = serverRepository.findBySeq(seq).orElse(null);
             servers.add(server);
         }
 
@@ -152,7 +172,7 @@ public class McpServerV3Service {
     }
 
     public ApiResponse<McpDetailResponse> findServerById(Long seq) {
-        McpServerV3 server = serverRepository.findBySeq(seq).orElse(null);
+        McpServer server = serverRepository.findBySeq(seq).orElse(null);
 
         if(server == null) {
             return ApiResponse.error(HttpStatus.NOT_FOUND.toString(), Constants.MSG_NOT_FOUND);
@@ -174,7 +194,15 @@ public class McpServerV3Service {
         return ApiResponse.success(HttpStatus.OK.toString(), Constants.MSG_SUCCESS_TAG_LIST, response);
     }
 
-    private McpSummaryDataDto toSummaryDataDto(McpServerV3 s) {
+    private boolean containsKorean(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return false;
+        }
+
+        return text.matches(".*[ㄱ-힣].*");
+    }
+
+    private McpSummaryDataDto toSummaryDataDto(McpServer s) {
         return McpSummaryDataDto.builder()
                 .id(s.getSeq())
                 .type(s.getType())
@@ -193,7 +221,7 @@ public class McpServerV3Service {
                 .build();
     }
 
-    private McpDetailDataDto toDetailDataDto(McpServerV3 s) {
+    private McpDetailDataDto toDetailDataDto(McpServer s) {
         return McpDetailDataDto.builder()
                 .id(s.getSeq())
                 .type(s.getType())

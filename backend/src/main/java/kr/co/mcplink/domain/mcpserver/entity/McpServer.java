@@ -1,7 +1,6 @@
-package kr.co.mcplink.domain.mcpserver.v2.entity;
+package kr.co.mcplink.domain.mcpserver.entity;
 
-import kr.co.mcplink.domain.mcpserver.v1.entity.SecurityRank;
-import kr.co.mcplink.global.annotation.AutoIndexV2;
+import kr.co.mcplink.global.annotation.AutoIndex;
 import kr.co.mcplink.global.annotation.AutoSequence;
 import kr.co.mcplink.global.common.BaseTimeMongoEntity;
 import kr.co.mcplink.global.common.Constants;
@@ -18,10 +17,10 @@ import java.util.Map;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AutoSequence(collection = Constants.COLLECTION_MCP_SERVERS_V2)
-@AutoIndexV2(collection = Constants.COLLECTION_MCP_SERVERS_V2)
-@Document(collection = Constants.COLLECTION_MCP_SERVERS_V2)
-public class McpServerV2 extends BaseTimeMongoEntity {
+@AutoSequence(collection = Constants.COLLECTION_MCP_SERVERS)
+@AutoIndex(collection = Constants.COLLECTION_MCP_SERVERS)
+@Document(collection = Constants.COLLECTION_MCP_SERVERS)
+public class McpServer extends BaseTimeMongoEntity {
 
     @Id
     private String id;
@@ -42,7 +41,7 @@ public class McpServerV2 extends BaseTimeMongoEntity {
     private List<String> tags;
 
     @Field("mcpServers")
-    private McpServerV2.McpServerDetail detail;
+    private McpServerDetail detail;
 
     @Getter
     @AllArgsConstructor
@@ -69,5 +68,16 @@ public class McpServerV2 extends BaseTimeMongoEntity {
 
             return new McpServerDetail(name, description, command, args, env);
         }
+    }
+
+    @Field("mcpServersKr")
+    private McpServerSummary summary;
+
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor(access = AccessLevel.PROTECTED)
+    public static class McpServerSummary {
+        private List<String> name;
+        private String description;
     }
 }

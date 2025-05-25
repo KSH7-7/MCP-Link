@@ -1,8 +1,11 @@
-package kr.co.mcplink.domain.schedule.v3.service;
+package kr.co.mcplink.domain.schedule.service;
 
-import kr.co.mcplink.domain.mcpserver.v3.repository.McpServerV3Repository;
-import kr.co.mcplink.domain.schedule.v3.repository.GeminiPendingQueueV3Repository;
-import kr.co.mcplink.domain.schedule.v3.repository.GithubPendingQueueV3Repository;
+import kr.co.mcplink.domain.gemini.service.FetchTagService;
+import kr.co.mcplink.domain.gemini.service.FetchTranslateService;
+import kr.co.mcplink.domain.mcpserver.entity.McpServer;
+import kr.co.mcplink.domain.mcpserver.repository.McpServerRepository;
+import kr.co.mcplink.domain.schedule.repository.GeminiPendingQueueRepository;
+import kr.co.mcplink.domain.schedule.repository.GithubPendingQueueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -10,18 +13,23 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class ScheduleV3Service {
+public class ScheduleService {
 
-    private final EnQueueV3Service enQueueService;
-    private final DataPrepV3Service dataPrepService;
-    private final McpServerV3Repository mcpServerV3Repository;
-    private final GithubPendingQueueV3Repository githubRepository;
-    private final GeminiPendingQueueV3Repository geminiRepository;
+    private final FetchTranslateService fetchTranslateService;
+    private final FetchTagService fetchTagService;
+    private final EnQueueService enQueueService;
+    private final DataPrepService dataPrepService;
+    private final DataStoreService dataStoreService;
+    private final McpServerRepository serverRepository;
+    private final GithubPendingQueueRepository githubRepository;
+    private final GeminiPendingQueueRepository geminiRepository;
 
     public void initData() {
 
@@ -167,11 +175,11 @@ public class ScheduleV3Service {
         }
     }
 
-    public void updateData() {
+    public void updateKrData() {
 
         int geminiBatchCount = 0;
 
-        List<String> updateIds = mcpServerV3Repository.findIdsByDetailDescriptionContaining("We apologize for the inconvenience");
+        List<String> updateIds = serverRepository.findIdsByDetailDescriptionContaining("We apologize for the inconvenience");
         String updateTime = LocalDateTime.now(ZoneId.of("Asia/Seoul"))
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
@@ -246,5 +254,75 @@ public class ScheduleV3Service {
             log.error("❌❌❌❌❌ {} || Gemini ERROR: {} ❌❌❌❌❌",
                     errorTime, e.getMessage(), e);
         }
+    }
+    public void updateData() {
+        List<Long> errorList = new ArrayList<>();
+
+        for (long seq = 1; seq <= 1; seq++) {
+            Optional<McpServer> optional = serverRepository.findBySeq(seq);
+            if (optional.isEmpty()) {
+                log.warn("No server found with seq: {}, skipping", seq);
+                continue;
+            }
+
+            long startTime = System.currentTimeMillis();
+            McpServer server = optional.get();
+            String name = server.getDetail().getName();
+            String descEn = server.getDetail().getDescription();
+            List<String> tags = null;
+            List<String> tagsKr = null;
+            String descKr = null;
+            boolean hasError = false;
+
+            try {
+                descKr = fetchTranslateService.fetchDescriptionKr(descEn);
+                if (descKr == null) hasError = true;
+            } catch (Exception e) {
+                log.error("Error translating description for seq {}: {}", seq, e.getMessage());
+                hasError = true;
+            }
+
+            try {
+                tags = fetchTagService.fetchTags(name);
+                if (tags == null) hasError = true;
+            } catch (Exception e) {
+                log.error("Error fetching tags for seq {}: {}", seq, e.getMessage());
+                hasError = true;
+            }
+
+            try {
+                tagsKr = fetchTagService.fetchTagsKr(name);
+                if (tagsKr == null) hasError = true;
+            } catch (Exception e) {
+                log.error("Error fetching KR tags for seq {}: {}", seq, e.getMessage());
+                hasError = true;
+            }
+
+            if (hasError) {
+                errorList.add(seq);
+            }
+
+            if (tags != null) tags.forEach(dataStoreService::saveMcpTag);
+            if (tagsKr != null) tagsKr.forEach(dataStoreService::saveMcpTag);
+
+            dataStoreService.updateKr(server.getId(), tagsKr, descKr, tags);
+
+            log.info("✅✅✅ Successfully updated data for seq: {}", seq);
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            long waitTime = 20_000L - elapsed;
+            if (waitTime > 0) {
+                try {
+                    log.info("⏰⏰⏰ Waiting {} ms to respect rate limit before next seq", waitTime);
+                    Thread.sleep(waitTime);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Update process interrupted during wait after seq: {}", seq);
+                    break;
+                }
+            }
+        }
+
+        log.info("☑️☑️☑️ Error list: {}", errorList);
     }
 }
