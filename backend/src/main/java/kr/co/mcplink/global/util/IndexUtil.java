@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.index.Index;
-import org.springframework.data.mongodb.core.index.TextIndexDefinition;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -25,13 +24,5 @@ public class IndexUtil {
 			}
 		});
 		mongoOperations.indexOps(collection).ensureIndex(idx);
-	}
-
-	public void createTextIndex(String collection, String indexName, String field) {
-		TextIndexDefinition txtIdx = new TextIndexDefinition.TextIndexDefinitionBuilder()
-			.onField(field)
-			.named(indexName)
-			.build();
-		mongoOperations.indexOps(collection).ensureIndex(txtIdx);
 	}
 }

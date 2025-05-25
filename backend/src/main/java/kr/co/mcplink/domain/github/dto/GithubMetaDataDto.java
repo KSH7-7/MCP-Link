@@ -3,7 +3,7 @@ package kr.co.mcplink.domain.github.dto;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import kr.co.mcplink.domain.mcpserver.v1.entity.SecurityRank;
+import kr.co.mcplink.domain.mcpserver.entity.SecurityRank;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record GithubMetaDataDto(

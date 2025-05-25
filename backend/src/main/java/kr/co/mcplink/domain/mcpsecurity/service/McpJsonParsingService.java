@@ -5,8 +5,8 @@ import kr.co.mcplink.domain.mcpsecurity.dto.osv.OsvPackageEntryDto;
 import kr.co.mcplink.domain.mcpsecurity.dto.osv.OsvResultDto;
 import kr.co.mcplink.domain.mcpsecurity.dto.osv.OsvScanOutputWrapperDto;
 import kr.co.mcplink.domain.mcpsecurity.dto.osv.OsvVulnerabilityDto;
-import kr.co.mcplink.domain.mcpserver.kr.repository.McpServerKrRepository;
-import kr.co.mcplink.domain.mcpserver.v1.entity.SecurityRank;
+import kr.co.mcplink.domain.mcpserver.repository.McpServerRepository;
+import kr.co.mcplink.domain.mcpserver.entity.SecurityRank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 public class McpJsonParsingService {
 
 	private final ObjectMapper objectMapper;
-	private final McpServerKrRepository serverRepository;
+	private final McpServerRepository serverRepository;
 
 	// @Transactional
 	public void processOsvResult(String osvOutputJson, String mcpServerId) {

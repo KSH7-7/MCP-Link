@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.co.mcplink.domain.gemini.client.GeminiApiClient;
 import kr.co.mcplink.domain.gemini.dto.GeminiRequestDto;
 import kr.co.mcplink.domain.gemini.dto.GeminiResponseDto;
-import kr.co.mcplink.domain.mcpserver.v2.entity.McpServerV2;
-import kr.co.mcplink.domain.mcpserver.v2.repository.McpServerV2Repository;
+import kr.co.mcplink.domain.mcpserver.entity.McpServer;
+import kr.co.mcplink.domain.mcpserver.repository.McpServerRepository;
 import kr.co.mcplink.global.annotation.ExcludeParamLog;
 import kr.co.mcplink.global.common.Constants;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,7 @@ public class FetchSummaryService {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final McpServerV2Repository mcpServerV2Repository;
+    private final McpServerRepository serverRepository;
     private final GeminiApiClient geminiClient;
 
     @ExcludeParamLog
@@ -53,10 +53,10 @@ public class FetchSummaryService {
 
     private String generateFallbackSummary(String serverId) {
         try {
-            Optional<McpServerV2> serverOpt = mcpServerV2Repository.findById(serverId);
+            Optional<McpServer> serverOpt = serverRepository.findById(serverId);
 
             if (serverOpt.isPresent()) {
-                McpServerV2 server = serverOpt.get();
+                McpServer server = serverOpt.get();
                 String serverUrl = server.getUrl();
 
                 return String.format(
@@ -91,7 +91,7 @@ public class FetchSummaryService {
         
         Please respond ONLY with valid JSON in the following format:
         {
-          "summary": "Your concise functional description here"
+            "summary": "Your concise functional description here"
         }
         
         README content:

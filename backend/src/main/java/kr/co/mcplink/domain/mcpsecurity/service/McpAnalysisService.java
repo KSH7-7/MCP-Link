@@ -2,8 +2,8 @@ package kr.co.mcplink.domain.mcpsecurity.service;
 
 import jakarta.annotation.PostConstruct;
 import kr.co.mcplink.domain.mcpsecurity.dto.McpScanResultDto;
-import kr.co.mcplink.domain.mcpserver.kr.repository.McpServerKrRepository;
-import kr.co.mcplink.domain.mcpserver.v3.entity.McpServerV3;
+import kr.co.mcplink.domain.mcpserver.repository.McpServerRepository;
+import kr.co.mcplink.domain.mcpserver.entity.McpServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,7 +42,7 @@ public class McpAnalysisService {
 	@Value("${app.analysis.temp-dir}")
 	private String tempDirStr;
 
-	private final McpServerKrRepository serverRepository;
+	private final McpServerRepository serverRepository;
 
 	@PostConstruct
 	public void init() {
@@ -60,7 +60,7 @@ public class McpAnalysisService {
 	 * @return 모든 서버의 스캔 결과 리스트
 	 */
 	public List<McpScanResultDto> scanSpecificServer() {
-		List<McpServerV3> servers = serverRepository.findByOfficialFalse();
+		List<McpServer> servers = serverRepository.findByOfficialFalse();
 
 		if (servers.isEmpty()) {
 			log.error("오피셜이 false인게 없으면 안됨.");
@@ -68,7 +68,7 @@ public class McpAnalysisService {
 		}
 		List<McpScanResultDto> results = new ArrayList<>();
 
-		for (McpServerV3 server : servers) {
+		for (McpServer server : servers) {
 			String rawUrl = server.getUrl();
 			String cloneUrl = rawUrl.endsWith(".git") ? rawUrl : rawUrl + ".git";
 			String name = cloneUrl.substring(cloneUrl.lastIndexOf('/') + 1);
