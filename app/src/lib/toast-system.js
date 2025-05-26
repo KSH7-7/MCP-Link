@@ -4,16 +4,21 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { goto } from '$app/navigation';
 import toastStore from './stores/toast';
+import { handleTauriError } from './error-handler';
 
 // Tauri의 알림 시스템을 통해 알림 표시
 export async function showNotification(title, body, keyword) {
-  try {
-    await invoke('show_notification', { title, body, keyword });
-    return true;
-  } catch (error) {
-    console.error('알림 표시 실패:', error);
-    return false;
-  }
+  return handleTauriError(
+    async () => {
+      await invoke('show_notification', { title, body, keyword });
+      return true;
+    },
+    false,
+    { 
+      showToast: true,
+      position: 'top-right'
+    }
+  );
 }
 
 // 알림 관련 이벤트 리스너 설정
@@ -72,10 +77,18 @@ export function showToast(message, options = {}) {
     position = 'bottom-center' 
   } = options;
   
+  // 로깅
+  if (type === 'error') {
+    console.error('토스트 오류:', message);
+  } else if (type === 'warning') {
+    console.warn('토스트 경고:', message);
+  }
+  
   // Svelte store 업데이트
   toastStore.update(state => ({
     ...state,
     show: true,
+    title,
     message,
     type,
     duration,
@@ -91,4 +104,15 @@ export function showToast(message, options = {}) {
   }, duration);
   
   return true;
+}
+
+// 오류 토스트 메시지 표시 (error-handler.ts의 showErrorToast와 기능 중복을 피하기 위해 이름 변경)
+export function showSimpleErrorToast(error, options = {}) {
+  const message = error instanceof Error ? error.message : String(error);
+  return showToast(message, { 
+    type: 'error', 
+    duration: 5000, 
+    position: 'bottom-center',
+    ...options 
+  });
 }

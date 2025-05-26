@@ -47,9 +47,15 @@ notify-rust = "4.10.0"
 winrt-notification = "0.5.1"
 url = "2.4.1"
 chrono = "0.4.31"
+
 # Windows API 접근용 (앱 강제 활성화)
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.48", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading"] }
+windows = { version = "0.48", features = [
+    "Win32_Foundation", 
+    "Win32_UI_WindowsAndMessaging", 
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse"  # keybd_event를 위해 추가
+] }
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = "2"

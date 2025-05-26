@@ -14,6 +14,9 @@
 
   // Search value
   let searchValue = ""
+  
+  // 프로그래밍적 변경 플래그
+  let isProgrammaticChange = false
 
   // Debounce timer
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -31,7 +34,14 @@
     // set-search-term 이벤트 리스너 추가 - 알림에서 검색창에 키워드 설정용
     const handleSetSearchTerm = (event: CustomEvent<string>) => {
       if (event?.detail) {
+        // 프로그래밍적 변경 플래그 설정
+        isProgrammaticChange = true;
         searchValue = event.detail;
+        
+        // 디바운스 시간보다 약간 긴 시간 후 플래그 해제
+        setTimeout(() => {
+          isProgrammaticChange = false;
+        }, DEBOUNCE_DELAY + 50); // 350ms 후 해제
         
         // 검색창 강조 효과
         setTimeout(() => {
@@ -61,6 +71,11 @@
 
   // Debounced search function
   function debouncedSearch() {
+    // 프로그래밍적 변경인 경우 검색 이벤트를 발생시키지 않음
+    if (isProgrammaticChange) {
+      return;
+    }
+    
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       dispatch("search", { value: searchValue })

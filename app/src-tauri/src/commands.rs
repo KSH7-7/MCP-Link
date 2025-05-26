@@ -1,6 +1,7 @@
 // app/src-tauri/src/commands.rs
 
 use crate::force_activate;
+use crate::{api_error, fs_error, log_error, to_string_error, AppError, AppResult};
 use dotenvy::dotenv; // Used to load .env at runtime in development mode
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -158,159 +159,174 @@ pub async fn get_mcp_data(
     search_term: Option<String>,
     cursor_id: Option<i32>,
 ) -> Result<MCPCardResponse, String> {
-    // Load .env file in development mode (ignored if already loaded)
-    #[cfg(debug_assertions)]
-    let _ = dotenv();
+    // 새로운 내부 함수 구현 (AppResult 사용)
+    async fn get_mcp_data_internal(
+        client: &Client,
+        search_term: Option<String>,
+        cursor_id: Option<i32>,
+    ) -> AppResult<MCPCardResponse> {
+        // Load .env file in development mode (ignored if already loaded)
+        #[cfg(debug_assertions)]
+        let _ = dotenv();
 
-    // Get environment variables at runtime
-    let base_url: String = if cfg!(debug_assertions) {
-        // Development mode: get from environment variable
-        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| String::new())
-    } else {
-        // Deployment mode: include the value from .env file at compile time
-        env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| {
-            include_str!("../../.env")
-                .lines()
-                .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
-                .and_then(|line| line.split('=').nth(1))
-                .unwrap_or("")
-                .to_string()
-        })
-    };
+        // Get environment variables at runtime
+        let base_url: String = if cfg!(debug_assertions) {
+            // Development mode: get from environment variable
+            env::var("CRAWLER_API_BASE_URL")
+                .unwrap_or_else(|_| String::new())
+        } else {
+            // Deployment mode: include the value from .env file at compile time
+            env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| {
+                include_str!("../../.env")
+                    .lines()
+                    .find(|line| line.starts_with("CRAWLER_API_BASE_URL="))
+                    .and_then(|line| line.split('=').nth(1))
+                    .unwrap_or("")
+                    .to_string()
+            })
+        };
 
-    // Add cursor ID to URL configuration
-    let request_url = if let Some(term) = search_term {
-        if term.is_empty() {
+        if base_url.is_empty() {
+            return Err(AppError::ConfigError {
+                msg: "API 기본 URL이 설정되지 않았습니다".to_string(),
+            });
+        }
+
+        // Add cursor ID to URL configuration
+        let request_url = if let Some(term) = search_term {
+            if term.is_empty() {
+                if let Some(cursor) = cursor_id {
+                    format!("{}?size=10&cursorId={}", base_url, cursor)
+                } else {
+                    format!("{}?size=10", base_url)
+                }
+            } else {
+                let encoded_term = encode(&term);
+                if let Some(cursor) = cursor_id {
+                    // Add cursor for search requests too
+                    format!(
+                        "{}/search?name={}&size=10&cursorId={}",
+                        base_url, encoded_term, cursor
+                    )
+                } else {
+                    format!("{}/search?name={}&size=10", base_url, encoded_term)
+                }
+            }
+        } else {
             if let Some(cursor) = cursor_id {
                 format!("{}?size=10&cursorId={}", base_url, cursor)
             } else {
                 format!("{}?size=10", base_url)
             }
-        } else {
-            let encoded_term = encode(&term);
-            if let Some(cursor) = cursor_id {
-                // Add cursor for search requests too
-                format!(
-                    "{}/search?name={}&size=10&cursorId={}",
-                    base_url, encoded_term, cursor
+        };
+
+        // API 요청 수행
+        let response = client
+            .get(&request_url)
+            .send()
+            .await
+            .map_err(|e| api_error(e, None))?;
+
+        let status = response.status();
+        let status_code = status.as_u16();
+
+        if status.is_success() {
+            // 응답 성공 시 텍스트 본문 읽기
+            let text_body = response.text().await.map_err(|e| {
+                api_error(
+                    format!("응답 텍스트 읽기 실패: {}", e),
+                    Some(status_code),
                 )
-            } else {
-                format!("{}/search?name={}&size=10", base_url, encoded_term)
-            }
-        }
-    } else {
-        if let Some(cursor) = cursor_id {
-            format!("{}?size=10&cursorId={}", base_url, cursor)
-        } else {
-            format!("{}?size=10", base_url)
-        }
-    };
+            })?;
 
-    match state.client.get(&request_url).send().await {
-        Ok(response) => {
-            let status = response.status();
+            // ApiResponse 파싱
+            let api_response: ApiResponse = serde_json::from_str(&text_body).map_err(|e| {
+                log_error(
+                    AppError::JsonError {
+                        msg: format!("ApiResponse 파싱 오류: {}", e),
+                    },
+                    "get_mcp_data",
+                )
+            })?;
 
-            if status.is_success() {
-                match response.text().await {
-                    Ok(text_body) => {
-                        match serde_json::from_str::<ApiResponse>(&text_body) {
-                            Ok(api_response) => {
-                                if let Value::Object(data_obj) = &api_response.data {
-                                    match serde_json::from_value::<DataWrapper>(Value::Object(
-                                        data_obj.clone(),
-                                    )) {
-                                        Ok(data_wrapper) => {
-                                            let cards: Vec<MCPCard> = data_wrapper
-                                                .mcpServers
-                                                .iter()
-                                                .map(|api_card| {
-                                                    // API에서 보안 랭크 값을 가져옴 (없으면 기본값 "UNRATE" 사용)
-                                                    let security_rank =
-                                                        match &api_card.security_rank {
-                                                            Some(rank) => rank.clone(),
-                                                            None => "UNRATE".to_string(),
-                                                        };
+            // 데이터 처리
+            if let Value::Object(data_obj) = &api_response.data {
+                // DataWrapper로 파싱
+                let data_wrapper: DataWrapper = serde_json::from_value(Value::Object(data_obj.clone()))
+                    .map_err(|e| {
+                        log_error(
+                            AppError::JsonError {
+                                msg: format!("DataWrapper 파싱 오류: {}", e),
+                            },
+                            "get_mcp_data",
+                        )
+                    })?;
 
-                                                    MCPCard {
-                                                        id: api_card.id,
-                                                        title: api_card.mcpServers.name.clone(),
-                                                        description: api_card
-                                                            .mcpServers
-                                                            .description
-                                                            .clone(),
-                                                        url: api_card.url.clone(),
-                                                        stars: api_card.stars,
-                                                        scanned: api_card.scanned,
-                                                        security_rank,
-                                                    }
-                                                })
-                                                .collect();
+                // 카드 데이터 매핑
+                let cards: Vec<MCPCard> = data_wrapper
+                    .mcpServers
+                    .iter()
+                    .map(|api_card| {
+                        // API에서 보안 랭크 값을 가져옴 (없으면 기본값 "UNRATE" 사용)
+                        let security_rank = match &api_card.security_rank {
+                            Some(rank) => rank.clone(),
+                            None => "UNRATE".to_string(),
+                        };
 
-                                            // Extract page information
-                                            let end_cursor = match data_wrapper.pageInfo.endCursor {
-                                                Some(Value::Number(n)) => {
-                                                    n.as_i64().map(|x| x as i32)
-                                                }
-                                                _ => None,
-                                            };
-
-                                            let response = MCPCardResponse {
-                                                cards,
-                                                page_info: PageInfoResponse {
-                                                    has_next_page: data_wrapper
-                                                        .pageInfo
-                                                        .hasNextPage,
-                                                    end_cursor: end_cursor,
-                                                    total_items: data_wrapper.pageInfo.totalItems,
-                                                },
-                                            };
-
-                                            return Ok(response);
-                                        }
-                                        Err(e) => {
-                                            return Err(format!("[get_mcp_data] Failed to parse data into DataWrapper: {}", e));
-                                        }
-                                    }
-                                } else {
-                                    // If data is not an object or missing, return empty response
-                                    return Ok(MCPCardResponse {
-                                        cards: Vec::new(),
-                                        page_info: PageInfoResponse {
-                                            has_next_page: false,
-                                            end_cursor: None,
-                                            total_items: 0,
-                                        },
-                                    });
-                                }
-                            }
-                            Err(e) => {
-                                let msg = format!("[get_mcp_data] JSON parsing error for ApiResponse: {}. Body: {:.500}", e, text_body);
-                                return Err(msg);
-                            }
+                        MCPCard {
+                            id: api_card.id,
+                            title: api_card.mcpServers.name.clone(),
+                            description: api_card.mcpServers.description.clone(),
+                            url: api_card.url.clone(),
+                            stars: api_card.stars,
+                            scanned: api_card.scanned,
+                            security_rank,
                         }
-                    }
-                    Err(e) => {
-                        let msg = format!("[get_mcp_data] Failed to read response text: {}", e);
-                        return Err(msg);
-                    }
-                }
+                    })
+                    .collect();
+
+                // 페이지 정보 추출
+                let end_cursor = match data_wrapper.pageInfo.endCursor {
+                    Some(Value::Number(n)) => n.as_i64().map(|x| x as i32),
+                    _ => None,
+                };
+
+                // 응답 생성
+                return Ok(MCPCardResponse {
+                    cards,
+                    page_info: PageInfoResponse {
+                        has_next_page: data_wrapper.pageInfo.hasNextPage,
+                        end_cursor: end_cursor, 
+                        total_items: data_wrapper.pageInfo.totalItems,
+                    },
+                });
             } else {
-                let error_body = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
-                let msg = format!(
-                    "[get_mcp_data] Server error for {}: {}. Body: {:.500}",
-                    request_url, status, error_body
-                );
-                return Err(msg);
+                // 데이터가 없거나 객체가 아닌 경우 빈 응답 반환
+                return Ok(MCPCardResponse {
+                    cards: Vec::new(),
+                    page_info: PageInfoResponse {
+                        has_next_page: false,
+                        end_cursor: None,
+                        total_items: 0,
+                    },
+                });
             }
-        }
-        Err(e) => {
-            let msg = format!("[get_mcp_data] Request error for {}: {}", request_url, e);
-            return Err(msg);
+        } else {
+            // 오류 응답 처리
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("응답 오류 본문 읽기 실패: {}", e));
+
+            return Err(api_error(
+                format!("서버 오류: {} - {}", status, error_body),
+                Some(status_code),
+            ));
         }
     }
+
+    // 내부 함수 실행 및 오류 변환
+    to_string_error(get_mcp_data_internal(&state.client, search_term, cursor_id).await)
 }
 
 #[tauri::command]
@@ -1174,47 +1190,74 @@ pub fn read_mcp_server_config(
     app: AppHandle,
     server_name: String,
 ) -> Result<MCPServerConfig, String> {
-    // Create Claude directory path
-    let claude_dir = match std::env::consts::OS {
-        "windows" => {
-            let appdata = app
-                .path()
-                .app_data_dir()
-                .map_err(|e| format!("Failed to get AppData directory: {}", e))?;
-            appdata.parent().unwrap_or(&appdata).join("Claude")
-        }
-        _ => {
-            return Err("Currently only supported on Windows".to_string());
-        }
-    };
+    // 새로운 내부 함수 구현 (AppResult 사용)
+    fn read_mcp_server_config_internal(
+        app: &AppHandle,
+        server_name: &str,
+    ) -> AppResult<MCPServerConfig> {
+        // Create Claude directory path
+        let claude_dir = match std::env::consts::OS {
+            "windows" => {
+                let appdata = app
+                    .path()
+                    .app_data_dir()
+                    .map_err(|e| AppError::OsError {
+                        msg: format!("AppData 디렉토리 가져오기 실패: {}", e),
+                    })?;
+                appdata.parent().unwrap_or(&appdata).join("Claude")
+            }
+            _ => {
+                return Err(AppError::OsError {
+                    msg: "현재 Windows에서만 지원됩니다".to_string(),
+                });
+            }
+        };
 
-    // Claude Desktop configuration file path
-    let config_path = claude_dir.join("claude_desktop_config.json");
+        // Claude Desktop configuration file path
+        let config_path = claude_dir.join("claude_desktop_config.json");
 
-    if !config_path.exists() {
-        return Err("Claude configuration file does not exist".to_string());
+        if !config_path.exists() {
+            return Err(AppError::ConfigError {
+                msg: "Claude 설정 파일이 존재하지 않습니다".to_string(),
+            });
+        }
+
+        // Read configuration file
+        let config_str = fs::read_to_string(&config_path).map_err(|e| {
+            fs_error(
+                e,
+                &config_path.to_string_lossy(),
+            )
+        })?;
+
+        // Parse configuration
+        let config: ClaudeDesktopConfig = serde_json::from_str(&config_str).map_err(|e| {
+            log_error(
+                AppError::JsonError {
+                    msg: format!("설정 파일 파싱 실패: {}", e),
+                },
+                "read_mcp_server_config",
+            )
+        })?;
+
+        // Check MCP server configuration
+        let servers = config.mcpServers.unwrap_or_default();
+
+        // Get configuration by specific server name
+        if let Some(server_config) = servers.get(server_name) {
+            Ok(server_config.clone())
+        } else {
+            Err(AppError::ConfigError {
+                msg: format!(
+                    "MCP 서버 '{}'가 설정에 없습니다",
+                    server_name
+                )
+            })
+        }
     }
 
-    // Read configuration file
-    let config_str = fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read config file: {}", e))?;
-
-    // Parse configuration
-    let config: ClaudeDesktopConfig = serde_json::from_str(&config_str)
-        .map_err(|e| format!("Failed to parse config file: {}", e))?;
-
-    // Check MCP server configuration
-    let servers = config.mcpServers.unwrap_or_default();
-
-    // Get configuration by specific server name
-    if let Some(server_config) = servers.get(&server_name) {
-        Ok(server_config.clone())
-    } else {
-        Err(format!(
-            "MCP server '{}' not found in configuration",
-            server_name
-        ))
-    }
+    // 내부 함수 실행 및 오류 변환
+    to_string_error(read_mcp_server_config_internal(&app, &server_name))
 }
 
 /// Function to check if a server name is installed
@@ -1555,7 +1598,30 @@ pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<()
         return Err("키워드 파일을 생성할 수 없습니다".to_string());
     }
 
-    // 앱 강제 활성화 시도 - 결과에 관계없이 성공 반환 (감시 스레드가 처리할 것임)
+    // 1. 키워드 상태 설정 (KeywordState 상태 객체 사용)
+    if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
+        keyword_state.set_keyword(keyword.clone(), "notification_click", 1);
+        keyword_state.set_pending(true);
+        keyword_state.update_click_time();
+        
+        // 로그 파일에 기록
+        if let Ok(mut log_file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&click_log_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(
+                log_file,
+                "[{}] KeywordState에 키워드 설정됨: {}",
+                chrono::Local::now().format("%H:%M:%S"),
+                keyword
+            );
+        }
+    }
+
+    // 앱 강제 활성화 시도
     let activation_result = force_activate::force_app_to_foreground();
 
     // 활성화 시도 로그
@@ -1573,9 +1639,50 @@ pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<()
             if activation_result.is_ok() {
                 "성공"
             } else {
-                "알림 감시 스레드에서 처리 예정"
+                "실패 (직접 이벤트 발생 시도)"
             }
         );
+    }
+    
+    // 앱 활성화 이벤트 발생 (개선된 버전)
+    let event_result = force_activate::emit_app_activated_event(&app);
+    
+    // 이벤트 발생 로그
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = writeln!(
+            file,
+            "[{}] 앱 활성화 이벤트 발생 결과: {}",
+            chrono::Local::now().format("%H:%M:%S"),
+            if event_result.is_ok() { "성공" } else { "실패" }
+        );
+    }
+    
+    // 직접 search-keyword 이벤트 발생 (이중 안전장치)
+    if let Some(window) = app.get_webview_window("main") {
+        use tauri::Emitter;
+        let emit_result = window.emit("search-keyword", keyword.clone());
+        
+        // 로그 파일에 기록
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(
+                file,
+                "[{}] 키워드 이벤트 직접 발생 결과: {}",
+                chrono::Local::now().format("%H:%M:%S"),
+                if emit_result.is_ok() { "성공" } else { "실패" }
+            );
+        }
     }
 
     // 성공 로그
@@ -1596,17 +1703,138 @@ pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<()
     Ok(())
 }
 
-// 앱 활성화 상태를 확인하고 키워드가 있으면 표시하는 함수
+/// 앱 활성화 상태를 확인하고 키워드가 있으면 표시하는 함수 - 개선된 버전
 #[tauri::command]
 pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, String> {
-    // 키워드 상태 확인
-    if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
-        // 키워드가 있으면 가져오기
-        if keyword_state.has_keyword() {
-            let keyword = keyword_state.take_keyword();
+    // 디버그 로그 설정
+    let log_path = std::env::temp_dir().join("mcplink_activation.log");
+    
+    // 로그 시작
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = writeln!(
+            file,
+            "[{}] === check_and_mark_app_activated 시작 ===",
+            chrono::Local::now().format("%H:%M:%S")
+        );
+    }
 
-            // 로그 파일에 기록
-            let log_path = std::env::temp_dir().join("mcplink_activation.log");
+    // 1. 먼저 키워드 파일 확인
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+    let file_keyword = if keyword_path.exists() {
+        // 파일의 수정 시간 확인
+        if let Ok(metadata) = std::fs::metadata(&keyword_path) {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(elapsed) = modified.elapsed() {
+                    // 10초 이상 된 파일은 무시하고 삭제
+                    if elapsed.as_secs() > 10 {
+                        let _ = std::fs::remove_file(&keyword_path);
+                        
+                        // 로그 기록
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .append(true)
+                            .open(&log_path)
+                        {
+                            use std::io::Write;
+                            let _ = writeln!(
+                                file,
+                                "[{}] 오래된 키워드 파일 삭제됨 ({}초)",
+                                chrono::Local::now().format("%H:%M:%S"),
+                                elapsed.as_secs()
+                            );
+                        }
+                        None
+                    } else {
+                        // 파일이 최신이면 읽기
+                        match std::fs::read_to_string(&keyword_path) {
+                            Ok(content) => {
+                                let trimmed = content.trim();
+                                if !trimmed.is_empty() {
+                                    // 로그 기록
+                                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .write(true)
+                                        .append(true)
+                                        .open(&log_path)
+                                    {
+                                        use std::io::Write;
+                                        let _ = writeln!(
+                                            file,
+                                            "[{}] 키워드 파일에서 발견: {} ({}초 전)",
+                                            chrono::Local::now().format("%H:%M:%S"),
+                                            trimmed,
+                                            elapsed.as_secs()
+                                        );
+                                    }
+                                    Some(trimmed.to_string())
+                                } else {
+                                    None
+                                }
+                            }
+                            Err(e) => {
+                                // 파일 읽기 오류 로그
+                                if let Ok(mut file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .append(true)
+                                    .open(&log_path)
+                                {
+                                    use std::io::Write;
+                                    let _ = writeln!(
+                                        file,
+                                        "[{}] 키워드 파일 읽기 오류: {}",
+                                        chrono::Local::now().format("%H:%M:%S"),
+                                        e
+                                    );
+                                }
+                                None
+                            }
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        // 파일 없음 로그
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(
+                file,
+                "[{}] 키워드 파일이 존재하지 않음",
+                chrono::Local::now().format("%H:%M:%S")
+            );
+        }
+        None
+    };
+
+    // 2. KeywordState 확인
+    let state_keyword = if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
+        // 앱 활성화 상태 설정
+        keyword_state.set_app_activated(true);
+        
+        // 대기 중인 키워드 확인
+        if keyword_state.is_pending() || keyword_state.has_keyword() {
+            let kw = keyword_state.take_keyword();
+            
+            // 로그 기록
             if let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -1616,48 +1844,123 @@ pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, St
                 use std::io::Write;
                 let _ = writeln!(
                     file,
-                    "[{}] check_and_mark_app_activated: 키워드 발견: {:?}",
+                    "[{}] KeywordState에서 키워드: {:?}",
                     chrono::Local::now().format("%H:%M:%S"),
-                    keyword
+                    kw
                 );
             }
-
-            return Ok(keyword);
+            
+            kw
+        } else {
+            None
         }
-    }
+    } else {
+        None
+    };
 
-    // 키워드 파일에서 직접 확인
-    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-    if keyword_path.exists() {
-        if let Ok(keyword) = std::fs::read_to_string(&keyword_path) {
-            if !keyword.is_empty() {
-                // 로그 파일에 기록
-                let log_path = std::env::temp_dir().join("mcplink_activation.log");
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    use std::io::Write;
-                    let _ = writeln!(
-                        file,
-                        "[{}] check_and_mark_app_activated: 파일에서 키워드 발견: {}",
-                        chrono::Local::now().format("%H:%M:%S"),
-                        keyword
-                    );
-                }
+    // 3. 최종 키워드 결정 (파일 우선)
+    let final_keyword = file_keyword.or(state_keyword);
 
-                // 키워드 파일 삭제
-                let _ = std::fs::remove_file(&keyword_path);
-
-                return Ok(Some(keyword));
+    // 4. 키워드가 있으면 이벤트 발생
+    if let Some(ref keyword) = final_keyword {
+        if let Some(window) = app.get_webview_window("main") {
+            use tauri::Emitter;
+            let result = window.emit("search-keyword", keyword.clone());
+            
+            // 로그 기록
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&log_path)
+            {
+                use std::io::Write;
+                let _ = writeln!(
+                    file,
+                    "[{}] search-keyword 이벤트 발생 결과: {:?}",
+                    chrono::Local::now().format("%H:%M:%S"),
+                    result.is_ok()
+                );
             }
         }
+        
+        // 키워드 처리 후 파일 삭제
+        if keyword_path.exists() {
+            let _ = std::fs::remove_file(&keyword_path);
+        }
     }
 
-    // 키워드가 없음
-    Ok(None)
+    // 로그 종료
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = writeln!(
+            file,
+            "[{}] === check_and_mark_app_activated 종료 (결과: {:?}) ===",
+            chrono::Local::now().format("%H:%M:%S"),
+            final_keyword
+        );
+    }
+
+    Ok(final_keyword)
+}
+
+/// 앱 활성화를 알리고 앱을 전면으로 가져오는 함수 (개선된 로깅 사용)
+#[tauri::command]
+pub fn notify_app_activated(app: AppHandle) -> Result<(), String> {
+    // 새로운 통합 로깅 시스템 사용
+    crate::log_message(
+        crate::LogLevel::Info,
+        crate::LogCategory::Activation,
+        "notify_app_activated",
+        "앱 활성화 알림 명령 호출됨"
+    );
+    
+    // 앱 활성화 상태 업데이트 (KeywordState 사용)
+    if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
+        // 앱 활성화 상태 설정
+        keyword_state.set_app_activated(true);
+        
+        // 앱 활성화 시간과 가장 최근 알림 클릭 시간의 차이 기록
+        let time_diff = keyword_state.get_last_click_time().map(|t| {
+            let elapsed = t.elapsed();
+            format!("{}초 전", elapsed.as_secs())
+        }).unwrap_or_else(|| "알 수 없음".to_string());
+        
+        // 로그 기록
+        crate::log_message(
+            crate::LogLevel::Debug,
+            crate::LogCategory::Activation,
+            "notify_app_activated",
+            &format!("마지막 알림 클릭 시간: {}", time_diff)
+        );
+    }
+    
+    // 앱 활성화 이벤트 발생
+    let result = crate::force_activate::emit_app_activated_event(&app);
+    
+    // 결과 로깅
+    if let Err(ref e) = result {
+        crate::log_message(
+            crate::LogLevel::Error,
+            crate::LogCategory::Activation,
+            "notify_app_activated",
+            &format!("앱 활성화 이벤트 발생 실패: {}", e)
+        );
+    } else {
+        crate::log_message(
+            crate::LogLevel::Info,
+            crate::LogCategory::Activation,
+            "notify_app_activated",
+            "앱 활성화 이벤트 발생 성공"
+        );
+    }
+    
+    result
 }
 
 /// 설치된 MCP 개수를 가져오는 함수
@@ -1747,4 +2050,197 @@ pub async fn get_list_count(state: State<'_, AppState>) -> Result<i32, String> {
             return Err(format!("[get_list_count] Request error: {}", e));
         }
     }
+}
+
+/// 키워드 파일 삭제 함수
+#[tauri::command]
+pub fn delete_keyword_file() -> Result<(), String> {
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+    
+    if keyword_path.exists() {
+        match fs::remove_file(&keyword_path) {
+            Ok(_) => {
+                // 로그 기록
+                let log_path = std::env::temp_dir().join("mcplink_activation.log");
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    use std::io::Write;
+                    let _ = writeln!(
+                        file,
+                        "[{}] 키워드 파일 삭제됨: {:?}",
+                        chrono::Local::now().format("%H:%M:%S"),
+                        keyword_path
+                    );
+                }
+                Ok(())
+            }
+            Err(e) => Err(format!("키워드 파일 삭제 실패: {}", e))
+        }
+    } else {
+        Ok(()) // 파일이 없으면 성공으로 처리
+    }
+}
+
+/// 키워드 파일의 나이를 확인하는 함수
+#[derive(Serialize)]
+pub struct KeywordFileInfo {
+    pub keyword: String,
+    pub age_ms: u64,
+}
+
+#[tauri::command]
+pub fn check_keyword_file_age() -> Result<Option<KeywordFileInfo>, String> {
+    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
+    
+    if !keyword_path.exists() {
+        return Ok(None);
+    }
+    
+    // 파일 메타데이터 읽기
+    match fs::metadata(&keyword_path) {
+        Ok(metadata) => {
+            // 파일 수정 시간 가져오기
+            match metadata.modified() {
+                Ok(modified_time) => {
+                    // 현재 시간과의 차이 계산
+                    match modified_time.elapsed() {
+                        Ok(duration) => {
+                            let age_ms = duration.as_millis() as u64;
+                            
+                            // 파일 내용 읽기
+                            match fs::read_to_string(&keyword_path) {
+                                Ok(keyword) => {
+                                    let keyword = keyword.trim().to_string();
+                                    if keyword.is_empty() {
+                                        return Ok(None);
+                                    }
+                                    
+                                    Ok(Some(KeywordFileInfo {
+                                        keyword,
+                                        age_ms,
+                                    }))
+                                }
+                                Err(_) => Ok(None)
+                            }
+                        }
+                        Err(_) => Ok(None)
+                    }
+                }
+                Err(_) => Ok(None)
+            }
+        }
+        Err(_) => Ok(None)
+    }
+}
+
+/// 설치된 MCP 개수를 가져오는 함수
+#[tauri::command]
+pub fn get_installed_mcp_count(app: AppHandle) -> Result<usize, String> {
+    // TODO: 실제 MCP 설치 확인 로직 구현
+    // 현재는 더미 데이터 반환
+    Ok(3)
+}
+
+/// 키워드 상태를 완전히 정리하는 함수
+#[tauri::command]
+pub fn clear_keyword_state(app: AppHandle) -> Result<(), String> {
+    // 디버그 로그 설정
+    let log_path = std::env::temp_dir().join("mcplink_activation.log");
+    
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = writeln!(
+            file,
+            "[{}] === clear_keyword_state 시작 ===",
+            chrono::Local::now().format("%H:%M:%S")
+        );
+    }
+
+    // 1. 키워드 파일들 삭제
+    let temp_dir = std::env::temp_dir();
+    let files_to_clean = [
+        temp_dir.join("mcplink_last_keyword.txt"),
+        temp_dir.join("mcplink_keyword_update.txt"),
+    ];
+
+    for file_path in files_to_clean.iter() {
+        if file_path.exists() {
+            if let Err(e) = std::fs::remove_file(file_path) {
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    use std::io::Write;
+                    let _ = writeln!(
+                        file,
+                        "[{}] 파일 삭제 실패: {:?} - {}",
+                        chrono::Local::now().format("%H:%M:%S"),
+                        file_path,
+                        e
+                    );
+                }
+            } else {
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    use std::io::Write;
+                    let _ = writeln!(
+                        file,
+                        "[{}] 파일 삭제 성공: {:?}",
+                        chrono::Local::now().format("%H:%M:%S"),
+                        file_path
+                    );
+                }
+            }
+        }
+    }
+
+    // 2. KeywordState 정리
+    if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
+        keyword_state.clear_all();
+        
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(
+                file,
+                "[{}] KeywordState 정리 완료",
+                chrono::Local::now().format("%H:%M:%S")
+            );
+        }
+    }
+
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = writeln!(
+            file,
+            "[{}] === clear_keyword_state 완료 ===",
+            chrono::Local::now().format("%H:%M:%S")
+        );
+    }
+
+    Ok(())
 }
