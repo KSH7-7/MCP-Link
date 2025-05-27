@@ -570,24 +570,3 @@ pub fn check_and_get_keyword<R: Runtime>(app: AppHandle<R>) -> Result<Option<Str
 
     to_string_error(check_and_get_keyword_internal(&app))
 }
-
-/// 알림 클릭 확인 및 키워드 가져오기 함수
-#[tauri::command]
-pub fn check_and_get_keyword<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
-    fn check_and_get_keyword_internal<R: Runtime>(app: &AppHandle<R>) -> AppResult<Option<String>> {
-        if let Some(keyword_state) = app.try_state::<KeywordState>() {
-            if keyword_state.is_pending() {
-                keyword_state.set_pending(false);
-                
-                if keyword_state.has_keyword() {
-                    let keyword = keyword_state.take_keyword();
-                    return Ok(keyword);
-                }
-            }
-        }
-        
-        Ok(None)
-    }
-
-    to_string_error(check_and_get_keyword_internal(&app))
-}
