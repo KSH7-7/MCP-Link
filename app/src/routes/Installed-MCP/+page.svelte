@@ -30,10 +30,10 @@
     isLoading.set(true)
     errorMessage.set(null)
     
-    // 데이터 로딩 중 상태를 글로벌 스토어에도 표시
+    // show loading status in global store
     if ($sharedDataStore.loaded) {
-      // 이미 로드된 데이터가 있으면 유지 (다른 페이지에서 이미 로드한 경우)
-      // 여기서는 아무것도 하지 않음
+        // if already loaded data exists, keep it (already loaded in other pages)
+        // do nothing here
     }
 
     try {
@@ -77,7 +77,7 @@
         searchTerm: searchTerm.trim() || null, // Pass search term if it exists
       })
 
-      // MCP-list 페이지와 같이 백엔드의 security_rank를 프론트엔드용 securityRank로 변환
+      // convert backend security_rank to frontend securityRank
       for (const card of response.cards) {
         card.securityRank = (card.security_rank as any) || "UNRATE";
       }
@@ -92,7 +92,7 @@
         total_items: actualTotalItems,
       })
       
-      // 글로벌 데이터 스토어에 설치된 MCP 개수 업데이트
+      // update installed MCP count in global data store
       updateCount("installedCount", actualTotalItems)
     } catch (error: any) {
       errorMessage.set(`Failed to load installed MCPs: ${error.message || error}`)
@@ -160,7 +160,6 @@
         installedServers.set([])
       }
     } catch (error) {
-      console.error("[Installed-MCP] Search error:", error)
       // Maintain original data on error
       installedServers.set($originalServers)
     } finally {

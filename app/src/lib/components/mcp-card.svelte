@@ -43,9 +43,9 @@
   // Final description to display
   const displayDescription = truncateDescription(description, maxDescLength)
   
-  // 백엔드에서 제공하는 securityRank 값만 사용
-  // 더 이상 ID 기반 랜덤값 사용하지 않음
-  const assignedSecurityRank = securityRank;
+  // use securityRank value provided by backend
+  // no longer use random ID-based value
+  const assignedSecurityRank = securityRank
 
   // Function to open GitHub link
   async function openGitHub(urlToOpen: string) {
@@ -60,7 +60,6 @@
       // Use browser's default window.open method
       window.open(finalUrl, "_blank")
     } catch (error) {
-      console.error("Failed to open link:", error)
       // Notify user on failure
       alert(`Could not open the link. Please navigate manually: ${finalUrl}`)
     }
@@ -115,7 +114,7 @@
     } catch (err: any) {
       // Specify err type as any or Error
       errorMessage = `error occurred: ${err.message || err}`
-      console.error(`[mcp-card] Error during removal or restart: ${errorMessage}`)
+
       showError(`Error: ${errorMessage}`, 5000, "bottom-center")
     }
   }
@@ -129,11 +128,11 @@
 <!-- Reusable MCP card component -->
 <div class="card card-border w-full shadow-sm {variant === 'default' ? 'bg-base-100' : variant === 'primary' ? 'bg-primary text-primary-content' : 'bg-accent text-accent-content'} {className} {onClick ? 'cursor-pointer' : ''}" on:click={onClick}>
   <div class="card-body h-[140px] p-4">
-    <!-- 메인 카드 내용을 좌우로 분할 (약 85:15 비율) -->
+    <!-- split main card content into left and right -->
     <div class="flex h-full gap-2">
-      <!-- 왼쪽 컨텐츠: 제목과 설명 (85% 정도로 확장) -->
+      <!-- left content: title and description -->
       <div class="w-[85%] flex flex-col">
-        <!-- 제목 영역 -->
+        <!-- title area -->
         <div class="flex items-center gap-2 mb-1">
           <h2 class="card-title text-lg truncate">{title}</h2>
           <!-- Security rank status icon -->
@@ -160,15 +159,15 @@
           {/if}
         </div>
         
-        <!-- 설명 영역 - 고정 높이와 말줄임 처리 -->
+        <!-- description area - fixed height and line clamp -->
         <div class="flex-grow overflow-hidden">
           <p class="text-sm line-clamp-3">{displayDescription}</p>
         </div>
       </div>
       
-      <!-- 오른쪽 컨텐츠: 스타/깃허브 아이콘과 버튼 (15% 정도) -->
+      <!-- right content: star/github icon and buttons -->
       <div class="w-[15%] flex flex-col justify-between">
-        <!-- 상단: 스타 카운트와 깃허브 링크 (가로 정렬) -->
+        <!-- top: star count and github link (horizontal alignment) -->
         <div class="flex justify-end items-center gap-2">
           <!-- Star icon and count -->
           {#if stars > 0}
@@ -194,7 +193,7 @@
           {/if}
         </div>
         
-        <!-- 하단: 버튼 영역 - 항상 하단에 고정 (가로 정렬) -->
+        <!-- bottom: button area - always fixed at bottom (horizontal alignment) -->
         <div class="flex justify-end mt-auto">
           {#if mode === "installed"}
             <div class="flex gap-1">

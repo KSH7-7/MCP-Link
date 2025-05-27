@@ -47,7 +47,6 @@
       // Use browser's default window.open method
       window.open(finalUrl, "_blank")
     } catch (error) {
-      console.error("Failed to open link:", error)
       // Notify user on failure
       alert(`Could not open the link. Please navigate manually: ${finalUrl}`)
     }
@@ -98,9 +97,9 @@
 
       // Update detailed settings - do not show fields if they are not present in the data received from the crawler server
       if (detail.args) args = detail.args
-      // 환경 변수는 크롤러 서버 데이터에 존재할 경우에만 표시
+      // environment variables are only displayed if they exist in the crawler server data
       if (detail.env && Object.keys(detail.env).length > 0) env = detail.env
-      else env = {} // 환경 변수 데이터가 없으면 비어있는 객체로 설정하여 표시하지 않음
+      else env = {} // if there is no environment variable data, set an empty object to display nothing
       if (detail.command) command = detail.command
 
       // Update star rating array
@@ -117,10 +116,8 @@
           mode = "edit" // Change to edit mode if already installed
         }
       } catch (err) {
-        console.warn("Failed to check installation status:", err)
       }
     } catch (err: any) {
-      console.error("Failed to load detail data", err)
       error = `Failed to load detail data: ${err.message || err.toString()}`
       // Use example data (optional - for providing alternative UI on error)
       if (mcpId === 16) {
@@ -161,14 +158,14 @@
     url = params.get("url") || ""
     stars = parseInt(params.get("stars") || "0")
     
-    // 디테일 페이지에서 현재 모드에 따라 레이아웃에 알림
+    // display notification based on current mode in the detail page
     try {
       if (typeof window !== "undefined") {
-        // 현재 모드에 따라 활성화할 탭 경로 결정
+        // determine the path of the tab to activate based on the current mode
         const activeTab = mode === "edit" ? "/Installed-MCP" : "/MCP-list";
         
-        // 레이아웃에 알림 (activeTabPath 업데이트)
-        // 약간 지연시켜 모든 컴포넌트가 마운트된 후 실행
+        // display notification (update activeTabPath)
+        // slightly delay to ensure all components are mounted
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('navigate-to-event', { 
             detail: { path: activeTab }
@@ -176,7 +173,6 @@
         }, 10);
       }
     } catch (err) {
-      console.error("탭 활성화 이벤트 발생 실패:", err);
     }
 
     // Create star rating array (max 5)
@@ -302,7 +298,6 @@
                       try {
                         args = e.currentTarget.value.split(',').map(s => s.trim()).filter(s => s);
                       } catch (err) {
-                        console.error("Failed to parse arguments:", err);
                       }
                     }}
                   ></textarea>
@@ -314,7 +309,6 @@
                       try {
                         args = e.currentTarget.value.split(',').map(s => s.trim()).filter(s => s);
                       } catch (err) {
-                        console.error("Failed to parse arguments:", err);
                       }
                     }}
                   ></textarea>
@@ -352,7 +346,6 @@
                         });
                         env = envObj;
                       } catch (err) {
-                        console.error("Failed to parse environment variables:", err);
                       }
                     }}
                   ></textarea>
@@ -430,7 +423,6 @@ isOpen={showConfirmModal}
       goBack(); // Automatically go back to previous page
     } catch (err) {
       showError(`Error during MCP ${mode === "edit" ? "update" : "installation"}: ${err}`, 5000, "bottom-center");
-      console.error(`MCP ${mode === "edit" ? "update" : "installation"} error:`, err);
     }
   }}
   on:cancel={() => showConfirmModal = false}

@@ -21,7 +21,6 @@
       // Restart Claude Desktop
       await invoke("restart_claude_desktop")
     } catch (error) {
-      console.error("Failed to reset settings:", error)
       showError(`Failed to reset settings: ${error}`, 5000, "bottom-center")
     } finally {
       isResetting = false

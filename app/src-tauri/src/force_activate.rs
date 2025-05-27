@@ -1,4 +1,4 @@
-//! Windows 앱 활성화 및 포커스 강제 지정 모듈
+//! Windows app activation and focus force module
 
 use tauri::Manager;
 
@@ -6,25 +6,21 @@ use tauri::Manager;
 use std::ptr::null_mut;
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HWND, LPARAM, BOOL};
+use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
-use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowW, SetForegroundWindow, ShowWindow, 
-    SW_RESTORE, SW_SHOW, SW_SHOWNORMAL,
-    SetWindowPos, HWND_TOPMOST, HWND_NOTOPMOST, 
-    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, 
-    GetWindowThreadProcessId, BringWindowToTop,
-    GetForegroundWindow, IsIconic, EnumWindows,
-    GetWindowTextW, GetClassNameW, IsWindowVisible,
-    AllowSetForegroundWindow, ASFW_ANY,
-};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 #[cfg(target_os = "windows")]
-use windows::core::{PCWSTR};
-#[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    keybd_event, KEYBD_EVENT_FLAGS, VIRTUAL_KEY, VK_MENU
+    keybd_event, KEYBD_EVENT_FLAGS, VIRTUAL_KEY, VK_MENU,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::{
+    AllowSetForegroundWindow, BringWindowToTop, EnumWindows, FindWindowW, GetClassNameW,
+    GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+    SetForegroundWindow, SetWindowPos, ShowWindow, ASFW_ANY, HWND_NOTOPMOST, HWND_TOPMOST,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE, SW_SHOW, SW_SHOWNORMAL,
 };
 
 #[cfg(target_os = "windows")]
@@ -32,15 +28,15 @@ use std::ffi::OsStr;
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt;
 
-/// 애플리케이션 윈도우 이름
+// application window name
 static WINDOW_NAME: &str = "MCP Link";
 
-/// 애플리케이션 클래스 이름
+// application class name
 static CLASS_NAME: &str = "Tauri Window";
 
-/// 가능한 대체 창 이름 목록
+// possible alternative window names
 static ALT_WINDOW_NAMES: [&str; 15] = [
-    "MCP Link", 
+    "MCP Link",
     "MCPLink",
     "MCP-Link",
     "MCPLINK",
@@ -49,12 +45,12 @@ static ALT_WINDOW_NAMES: [&str; 15] = [
     "mcp link",
     "mcplink",
     "tauri app",
-    "Tauri App", 
+    "Tauri App",
     "Tauri",
     "TAURI",
     "Tauri Application",
     "MCP",
-    "Link"
+    "Link",
 ];
 
 // Helper function for wide string conversion
@@ -66,7 +62,7 @@ fn to_wide_string(s: &str) -> Vec<u16> {
         .collect()
 }
 
-/// EnumWindows 콜백 함수에서 사용할 데이터 구조체
+// data structure for EnumWindows callback function
 #[cfg(target_os = "windows")]
 struct EnumWindowsState {
     log_path: std::path::PathBuf,
@@ -74,19 +70,19 @@ struct EnumWindowsState {
     target_pid: Option<u32>,
 }
 
-/// EnumWindows 콜백 함수
+// EnumWindows callback function
 #[cfg(target_os = "windows")]
 extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
     unsafe {
         let state = lparam.0 as *mut EnumWindowsState;
-        
+
         if !IsWindowVisible(hwnd).as_bool() {
             return true.into();
         }
-        
+
         let mut process_id: u32 = 0;
         GetWindowThreadProcessId(hwnd, Some(&mut process_id));
-        
+
         if let Some(target_pid) = (*state).target_pid {
             if process_id == target_pid {
                 let mut title_buf = [0u16; 512];
@@ -97,7 +93,7 @@ extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
                 } else {
                     String::new()
                 };
-                
+
                 let mut class_buf = [0u16; 256];
                 let class_len = GetClassNameW(hwnd, class_buf.as_mut_slice());
                 let class_name = if class_len > 0 {
@@ -106,26 +102,12 @@ extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
                 } else {
                     String::new()
                 };
-                
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&(*state).log_path) {
-                    use std::io::Write;
-                    let _ = writeln!(file, "[{}] ✓ 프로세스 ID 일치 창 발견: hwnd={:?}, pid={}, title='{}', class='{}'", 
-                        chrono::Local::now().format("%H:%M:%S"),
-                        hwnd.0,
-                        process_id,
-                        title,
-                        class_name);
-                }
-                
+
                 (*state).found_hwnd = hwnd;
                 return false.into();
             }
         }
-        
+
         let mut title_buf = [0u16; 512];
         let title_len = GetWindowTextW(hwnd, title_buf.as_mut_slice());
         let title = if title_len > 0 {
@@ -134,7 +116,7 @@ extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         } else {
             String::new()
         };
-        
+
         let mut class_buf = [0u16; 256];
         let class_len = GetClassNameW(hwnd, class_buf.as_mut_slice());
         let class_name = if class_len > 0 {
@@ -143,68 +125,43 @@ extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         } else {
             String::new()
         };
-        
+
         let title_lower = title.to_lowercase();
         let class_lower = class_name.to_lowercase();
-        
-        let is_backup_target = 
-            (title == "MCP Link" && class_name == "Tauri Window") ||
-            (title == "MCP Link" && class_lower.contains("tauri")) ||
-            (title_lower.contains("mcp") && class_lower.contains("tauri")) ||
-            (title_lower.contains("mcp") && title_lower.contains("link")) ||
-            (class_lower.contains("tauri")) ||
-            (class_lower.contains("webview") && title_lower.contains("mcp"));
-        
+
+        let is_backup_target = (title == "MCP Link" && class_name == "Tauri Window")
+            || (title == "MCP Link" && class_lower.contains("tauri"))
+            || (title_lower.contains("mcp") && class_lower.contains("tauri"))
+            || (title_lower.contains("mcp") && title_lower.contains("link"))
+            || (class_lower.contains("tauri"))
+            || (class_lower.contains("webview") && title_lower.contains("mcp"));
+
         if (*state).found_hwnd.0 == 0 && is_backup_target {
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&(*state).log_path) {
-                use std::io::Write;
-                let _ = writeln!(file, "[{}] 백업 방식으로 창 발견: hwnd={:?}, title='{}', class='{}', pid={}", 
-                    chrono::Local::now().format("%H:%M:%S"),
-                    hwnd.0,
-                    title,
-                    class_name,
-                    process_id);
-            }
-            
             (*state).found_hwnd = hwnd;
             return false.into();
         }
-        
+
         true.into()
     }
 }
 
-/// 모든 창을 열거하여 적합한 창 찾기
+// enumerate all windows to find a suitable window
 #[cfg(target_os = "windows")]
-fn find_app_window(log_path: &std::path::Path) -> Option<HWND> {
+fn find_app_window() -> Option<HWND> {
     unsafe {
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(log_path) {
-            use std::io::Write;
-            let _ = writeln!(file, "[{}] === 모든 창 열거 시작 ===", 
-                chrono::Local::now().format("%H:%M:%S"));
-        }
-        
         let current_pid = std::process::id();
-        
+
         let mut state = EnumWindowsState {
-            log_path: log_path.to_path_buf(),
+            log_path: std::path::PathBuf::new(),
             found_hwnd: HWND(0),
             target_pid: Some(current_pid),
         };
-        
+
         EnumWindows(
             Some(enum_windows_callback),
-            LPARAM(&mut state as *mut _ as isize)
+            LPARAM(&mut state as *mut _ as isize),
         );
-        
+
         if state.found_hwnd.0 != 0 {
             Some(state.found_hwnd)
         } else {
@@ -213,7 +170,7 @@ fn find_app_window(log_path: &std::path::Path) -> Option<HWND> {
     }
 }
 
-/// 활성화 결과를 나타내는 구조체
+// structure for activation result
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ActivationResult {
     pub success: bool,
@@ -240,34 +197,21 @@ impl Default for ActivationResult {
     }
 }
 
-/// Windows에서 앱을 찾고 강제로 활성화하는 함수 - 강화된 버전
+// find and force activate app on Windows
 #[cfg(target_os = "windows")]
 pub fn force_app_to_foreground() -> Result<(), String> {
     unsafe {
-        let log_path = std::env::temp_dir().join("mcplink_activation.log");
-        
-        // 로그 시작
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path) {
-            use std::io::Write;
-            let _ = writeln!(file, "\n[{}] === 앱 활성화 시작 (강화된 버전) ===", 
-                chrono::Local::now().format("%H:%M:%S"));
-        }
-        
-        // SetForegroundWindow 권한 허용
+        // SetForegroundWindow permission allow
         AllowSetForegroundWindow(ASFW_ANY);
-        
-        // 1. 먼저 클래스 이름으로 찾기
+
+        // 1. First, find by class name
         let class_name_wide = to_wide_string("Tauri Window");
         let mut hwnd = FindWindowW(
             PCWSTR::from_raw(class_name_wide.as_ptr()),
             PCWSTR::from_raw(null_mut()),
         );
-        
-        // 2. 클래스 이름으로 못 찾으면 창 이름으로 찾기
+
+        // 2. If not found by class name, find by window name
         if hwnd.0 == 0 {
             let window_name_wide = to_wide_string("MCP Link");
             hwnd = FindWindowW(
@@ -275,219 +219,149 @@ pub fn force_app_to_foreground() -> Result<(), String> {
                 PCWSTR::from_raw(window_name_wide.as_ptr()),
             );
         }
-        
-        // 3. 여전히 못 찾으면 EnumWindows 사용
+
+        // 3. If still not found, use EnumWindows
         if hwnd.0 == 0 {
-            if let Some(found) = find_app_window(&log_path) {
+            if let Some(found) = find_app_window() {
                 hwnd = found;
             }
         }
-        
+
         if hwnd.0 == 0 {
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&log_path) {
-                use std::io::Write;
-                let _ = writeln!(file, "[{}] 오류: 앱 창을 찾을 수 없습니다", 
-                    chrono::Local::now().format("%H:%M:%S"));
-            }
-            return Err("앱 창을 찾을 수 없습니다".to_string());
+            return Err("app window not found".to_string());
         }
-        
-        // 로그: 창 찾음
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path) {
-            use std::io::Write;
-            let _ = writeln!(file, "[{}] 창 찾음: hwnd={:?}", 
-                chrono::Local::now().format("%H:%M:%S"), hwnd.0);
-        }
-        
-        // 현재 전경 창 가져오기
+
+        // get current foreground window
         let current_fg = GetForegroundWindow();
         let mut thread_id = 0;
         let mut current_thread_id = 0;
-        
+
         if current_fg.0 != 0 && current_fg != hwnd {
             thread_id = GetWindowThreadProcessId(hwnd, None);
             current_thread_id = GetWindowThreadProcessId(current_fg, None);
-            
-            // 스레드 연결
+
+            // thread connection
             if thread_id != current_thread_id {
                 AttachThreadInput(current_thread_id, thread_id, true);
             }
         }
-        
-        // 최소화된 경우 복원
+
+        // if minimized, restore
         if IsIconic(hwnd).as_bool() {
             ShowWindow(hwnd, SW_RESTORE);
             std::thread::sleep(std::time::Duration::from_millis(150));
-            
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&log_path) {
-                use std::io::Write;
-                let _ = writeln!(file, "[{}] 최소화된 창 복원", 
-                    chrono::Local::now().format("%H:%M:%S"));
-            }
         }
-        
-        // 1단계: 창 표시
+
+        // 1st step: show window
         ShowWindow(hwnd, SW_SHOW);
         ShowWindow(hwnd, SW_SHOWNORMAL);
-        
-        // 2단계: Alt 키 시뮬레이션 (더 안정적으로)
+
+        // 2nd step: simulate Alt key (more stable)
         keybd_event(VK_MENU.0 as u8, 0x38, KEYBD_EVENT_FLAGS(0), 0);
         std::thread::sleep(std::time::Duration::from_millis(50));
         keybd_event(VK_MENU.0 as u8, 0x38, KEYBD_EVENT_FLAGS(2), 0);
         std::thread::sleep(std::time::Duration::from_millis(50));
-        
-        // 3단계: 전경 설정 시도
+
+        // 3rd step: try to set foreground
         let result1 = SetForegroundWindow(hwnd);
-        
-        // 4단계: BringWindowToTop
+
+        // 4th step: BringWindowToTop
         BringWindowToTop(hwnd);
-        
-        // 5단계: 최상위 설정 및 해제
+
+        // 5th step: set topmost and unset
         SetWindowPos(
-            hwnd, 
-            HWND_TOPMOST, 
-            0, 0, 0, 0, 
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
         );
-        
+
         std::thread::sleep(std::time::Duration::from_millis(100));
-        
+
         SetWindowPos(
-            hwnd, 
-            HWND_NOTOPMOST, 
-            0, 0, 0, 0, 
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+            hwnd,
+            HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
         );
-        
-        // 6단계: 한 번 더 SetForegroundWindow
+
+        // 6th step: one more SetForegroundWindow
         std::thread::sleep(std::time::Duration::from_millis(50));
         let result2 = SetForegroundWindow(hwnd);
-        
-        // 7단계: 추가 Alt 키 트릭
+
+        // 7th step: additional Alt key trick
         keybd_event(VK_MENU.0 as u8, 0x38, KEYBD_EVENT_FLAGS(0), 0);
         keybd_event(VK_MENU.0 as u8, 0x38, KEYBD_EVENT_FLAGS(2), 0);
-        
-        // 8단계: 마지막 시도
+
+        // 8th step: last try
         BringWindowToTop(hwnd);
         SetForegroundWindow(hwnd);
-        
-        // 스레드 연결 해제
+
+        // thread connection release
         if thread_id != 0 && current_thread_id != 0 && thread_id != current_thread_id {
             AttachThreadInput(current_thread_id, thread_id, false);
         }
-        
-        // 결과 확인
+
+        // check result
         std::thread::sleep(std::time::Duration::from_millis(100));
         let final_fg = GetForegroundWindow();
         let success = final_fg == hwnd;
-        
-        // 로그 완료
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path) {
-            use std::io::Write;
-            let _ = writeln!(file, "[{}] 앱 활성화 완료 - 성공: {}, SetForeground 결과: {:?}, {:?}", 
-                chrono::Local::now().format("%H:%M:%S"),
-                success,
-                result1.as_bool(),
-                result2.as_bool());
-            let _ = writeln!(file, "[{}] === 앱 활성화 종료 ===\n", 
-                chrono::Local::now().format("%H:%M:%S"));
-        }
-        
+
         Ok(())
     }
 }
 
-/// 앱이 활성화될 때 호출되어 이벤트를 발생시키는 함수
+// function called when app is activated
 #[cfg(target_os = "windows")]
-pub fn emit_app_activated_event<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) -> Result<(), String> {
+pub fn emit_app_activated_event<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+) -> Result<(), String> {
     emit_app_activated_event_with_source(app_handle, false)
 }
 
-/// 소스 정보와 함께 앱 활성화 이벤트를 발생시키는 함수
+// function called when app is activated with source information
 #[cfg(target_os = "windows")]
-pub fn emit_app_activated_event_with_source<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>, from_notification: bool) -> Result<(), String> {
-    let log_path = std::env::temp_dir().join("mcplink_activation.log");
-    
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path) {
-        use std::io::Write;
-        let _ = writeln!(file, "[{}] 앱 활성화 이벤트 발생 시도 (fromNotification: {})", 
-            chrono::Local::now().format("%H:%M:%S"), from_notification);
-    }
-    
+pub fn emit_app_activated_event_with_source<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    from_notification: bool,
+) -> Result<(), String> {
     use tauri::Emitter;
     if let Some(window) = app_handle.get_webview_window("main") {
-        // 페이로드에 알림 여부 포함
+        // include notification information in payload
         let payload = serde_json::json!({
             "fromNotification": from_notification
         });
-        
+
         if let Err(e) = window.emit("app-activated", payload) {
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&log_path) {
-                use std::io::Write;
-                let _ = writeln!(file, "[{}] 앱 활성화 이벤트 발생 오류: {}", 
-                    chrono::Local::now().format("%H:%M:%S"), e);
-            }
-            return Err(format!("앱 활성화 이벤트 발생 오류: {}", e));
-        }
-        
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path) {
-            use std::io::Write;
-            let _ = writeln!(file, "[{}] 앱 활성화 이벤트 발생 성공 (fromNotification: {})", 
-                chrono::Local::now().format("%H:%M:%S"), from_notification);
+            return Err(format!("error triggering app activation event: {}", e));
         }
     } else {
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path) {
-            use std::io::Write;
-            let _ = writeln!(file, "[{}] 앱 활성화 이벤트 발생 실패: 메인 윈도우 찾을 수 없음", 
-                chrono::Local::now().format("%H:%M:%S"));
-        }
-        return Err("앱 활성화 이벤트 발생 실패: 메인 윈도우 찾을 수 없음".to_string());
+        return Err("failed to trigger app activation event: main window not found".to_string());
     }
-    
+
     Ok(())
 }
 
-/// 비 Windows 환경을 위한 빈 구현
+// empty implementation for non-Windows environment
 #[cfg(not(target_os = "windows"))]
-pub fn emit_app_activated_event<R: tauri::Runtime>(_app_handle: &tauri::AppHandle<R>) -> Result<(), String> {
+pub fn emit_app_activated_event<R: tauri::Runtime>(
+    _app_handle: &tauri::AppHandle<R>,
+) -> Result<(), String> {
     emit_app_activated_event_with_source(_app_handle, false)
 }
 
-/// 비 Windows 환경을 위한 소스 정보와 함께 앱 활성화 이벤트 발생
+// function called when app is activated with source information
 #[cfg(not(target_os = "windows"))]
-pub fn emit_app_activated_event_with_source<R: tauri::Runtime>(_app_handle: &tauri::AppHandle<R>, _from_notification: bool) -> Result<(), String> {
+pub fn emit_app_activated_event_with_source<R: tauri::Runtime>(
+    _app_handle: &tauri::AppHandle<R>,
+    _from_notification: bool,
+) -> Result<(), String> {
     use tauri::Emitter;
     if let Some(window) = _app_handle.get_webview_window("main") {
         let payload = serde_json::json!({
@@ -498,161 +372,156 @@ pub fn emit_app_activated_event_with_source<R: tauri::Runtime>(_app_handle: &tau
     Ok(())
 }
 
-/// 비 Windows 환경에서는 빈 구현만 제공
+// empty implementation for non-Windows environment
 #[cfg(not(target_os = "windows"))]
 pub fn force_app_to_foreground() -> Result<(), String> {
     Ok(())
 }
 
-/// 향상된 앱 창 활성화 함수 (Tauri 명령으로 사용)
+// enhanced app window activation function (used as Tauri command)
 #[tauri::command]
 #[cfg(target_os = "windows")]
 pub fn activate_app_window(app_handle: tauri::AppHandle) -> Result<ActivationResult, String> {
     unsafe {
         let start_time = std::time::Instant::now();
         let mut result = ActivationResult::default();
-        let log_path = std::env::temp_dir().join("mcplink_activation.log");
 
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path) {
-            use std::io::Write;
-            let _ = writeln!(file, "=== [{}] activate_app_window 명령 시작 ===", 
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-        }
-        
-        // 방법 1: Tauri API를 통한 활성화 시도
+        // method 1: try to activate using Tauri API
         if let Some(window) = app_handle.get_webview_window("main") {
             let show_result = window.show();
             let unminimize_result = window.unminimize();
             let focus_result = window.set_focus();
-            
+
             let tauri_success = show_result.is_ok() && focus_result.is_ok();
-            
+
             if tauri_success {
                 result.method_used = "tauri_api".to_string();
                 result.attempts += 1;
             }
         }
-        
-        // 방법 2: Win32 API 직접 호출
+
+        // method 2: call Win32 API directly
         AllowSetForegroundWindow(ASFW_ANY);
-        
+
         let mut hwnd = HWND(0);
         let mut win32_method = "unknown";
-        
-        // 1. 클래스 이름으로 찾기
+
+        // 1. find by class name
         let class_name_wide = to_wide_string("Tauri Window");
         hwnd = FindWindowW(
             PCWSTR::from_raw(class_name_wide.as_ptr()),
             PCWSTR::from_raw(null_mut()),
         );
-        
+
         if hwnd.0 != 0 {
             win32_method = "class_name";
         }
-        
-        // 2. 창 이름으로 찾기
+
+        // 2. find by window name
         if hwnd.0 == 0 {
             let window_name_wide = to_wide_string("MCP Link");
             hwnd = FindWindowW(
                 PCWSTR::from_raw(null_mut()),
                 PCWSTR::from_raw(window_name_wide.as_ptr()),
             );
-            
+
             if hwnd.0 != 0 {
                 win32_method = "window_name";
             }
         }
-        
-        // 3. EnumWindows로 찾기
+
+        // 3. find by EnumWindows
         if hwnd.0 == 0 {
-            if let Some(found) = find_app_window(&log_path) {
+            if let Some(found) = find_app_window() {
                 hwnd = found;
                 win32_method = "enum_windows";
             }
         }
-        
+
         if hwnd.0 == 0 {
             result.success = false;
             result.method_used = "failed_window_not_found".to_string();
             result.elapsed_ms = start_time.elapsed().as_millis() as u64;
-            result.error = Some("앱 창을 찾을 수 없습니다".to_string());
+            result.error = Some("app window not found".to_string());
             return Ok(result);
         }
-        
-        // 창 활성화
+
+        // activate window
         if IsIconic(hwnd).as_bool() {
             ShowWindow(hwnd, SW_RESTORE);
             result.attempts += 1;
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        
+
         ShowWindow(hwnd, SW_SHOW);
         ShowWindow(hwnd, SW_SHOWNORMAL);
         result.attempts += 1;
-        
-        // Alt 키 시뮬레이션
+
+        // Alt key simulation
         keybd_event(VK_MENU.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
         keybd_event(VK_MENU.0 as u8, 0, KEYBD_EVENT_FLAGS(2), 0);
-        
+
         SetForegroundWindow(hwnd);
         BringWindowToTop(hwnd);
         result.attempts += 1;
-        
+
         SetWindowPos(
-            hwnd, 
-            HWND_TOPMOST, 
-            0, 0, 0, 0, 
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
         );
-        
+
         std::thread::sleep(std::time::Duration::from_millis(50));
-        
+
         SetWindowPos(
-            hwnd, 
-            HWND_NOTOPMOST, 
-            0, 0, 0, 0, 
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+            hwnd,
+            HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
         );
-        
+
         SetForegroundWindow(hwnd);
         result.attempts += 1;
-        
+
         let final_fg_window = GetForegroundWindow();
         let activation_success = final_fg_window == hwnd;
-        
+
         result.success = activation_success;
         result.method_used = format!("win32_{}", win32_method);
         result.elapsed_ms = start_time.elapsed().as_millis() as u64;
-        
+
         if !activation_success {
-            result.error = Some("창은 찾았으나 활성화에 실패했습니다".to_string());
+            result.error = Some("window found but activation failed".to_string());
         }
-        
+
         if let Some(window) = app_handle.get_webview_window("main") {
             use tauri::Emitter;
             let _ = window.emit("app-activated", ());
         }
-        
+
         Ok(result)
     }
 }
 
-/// 다른 플랫폼용 activate_app_window 구현
+// implement activate_app_window for other platforms
 #[tauri::command]
 #[cfg(not(target_os = "windows"))]
 pub fn activate_app_window(app_handle: tauri::AppHandle) -> Result<ActivationResult, String> {
     let mut result = ActivationResult::default();
     result.success = true;
     result.method_used = "non_windows_platform".to_string();
-    
+
     if let Some(window) = app_handle.get_webview_window("main") {
         use tauri::Emitter;
         let _ = window.emit("app-activated", ());
     }
-    
+
     Ok(result)
 }

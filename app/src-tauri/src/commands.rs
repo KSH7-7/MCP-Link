@@ -1,7 +1,7 @@
 // app/src-tauri/src/commands.rs
 
 use crate::force_activate;
-use crate::{api_error, fs_error, log_error, to_string_error, AppError, AppResult};
+use crate::{api_error, fs_error, to_string_error, AppError, AppResult};
 use dotenvy::dotenv; // Used to load .env at runtime in development mode
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,7 @@ pub struct MCPCard {
     pub security_rank: String,
 }
 
-// 기본 보안 등급 값으로 "UNRATE" 반환하는 함수
+// function to return default security rank value "UNRATE"
 fn default_security_rank() -> String {
     "UNRATE".to_string()
 }
@@ -159,7 +159,7 @@ pub async fn get_mcp_data(
     search_term: Option<String>,
     cursor_id: Option<i32>,
 ) -> Result<MCPCardResponse, String> {
-    // 새로운 내부 함수 구현 (AppResult 사용)
+    // new internal function implementation (use AppResult)
     async fn get_mcp_data_internal(
         client: &Client,
         search_term: Option<String>,
@@ -172,8 +172,7 @@ pub async fn get_mcp_data(
         // Get environment variables at runtime
         let base_url: String = if cfg!(debug_assertions) {
             // Development mode: get from environment variable
-            env::var("CRAWLER_API_BASE_URL")
-                .unwrap_or_else(|_| String::new())
+            env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| String::new())
         } else {
             // Deployment mode: include the value from .env file at compile time
             env::var("CRAWLER_API_BASE_URL").unwrap_or_else(|_| {
@@ -188,7 +187,7 @@ pub async fn get_mcp_data(
 
         if base_url.is_empty() {
             return Err(AppError::ConfigError {
-                msg: "API 기본 URL이 설정되지 않았습니다".to_string(),
+                msg: "API base URL is not set".to_string(),
             });
         }
 
@@ -220,7 +219,7 @@ pub async fn get_mcp_data(
             }
         };
 
-        // API 요청 수행
+        // perform API request
         let response = client
             .get(&request_url)
             .send()
@@ -231,43 +230,36 @@ pub async fn get_mcp_data(
         let status_code = status.as_u16();
 
         if status.is_success() {
-            // 응답 성공 시 텍스트 본문 읽기
+            // read text body when response is successful
             let text_body = response.text().await.map_err(|e| {
                 api_error(
-                    format!("응답 텍스트 읽기 실패: {}", e),
+                    format!("failed to read response text: {}", e),
                     Some(status_code),
                 )
             })?;
 
-            // ApiResponse 파싱
-            let api_response: ApiResponse = serde_json::from_str(&text_body).map_err(|e| {
-                log_error(
-                    AppError::JsonError {
-                        msg: format!("ApiResponse 파싱 오류: {}", e),
-                    },
-                    "get_mcp_data",
-                )
-            })?;
+            // parse ApiResponse
+            let api_response: ApiResponse =
+                serde_json::from_str(&text_body).map_err(|e| AppError::JsonError {
+                    msg: format!("error parsing ApiResponse: {}", e),
+                })?;
 
-            // 데이터 처리
+            // handle data
             if let Value::Object(data_obj) = &api_response.data {
-                // DataWrapper로 파싱
-                let data_wrapper: DataWrapper = serde_json::from_value(Value::Object(data_obj.clone()))
-                    .map_err(|e| {
-                        log_error(
-                            AppError::JsonError {
-                                msg: format!("DataWrapper 파싱 오류: {}", e),
-                            },
-                            "get_mcp_data",
-                        )
+                // wrap data with DataWrapper
+                let data_wrapper: DataWrapper =
+                    serde_json::from_value(Value::Object(data_obj.clone())).map_err(|e| {
+                        AppError::JsonError {
+                            msg: format!("error parsing DataWrapper: {}", e),
+                        }
                     })?;
 
-                // 카드 데이터 매핑
+                // map card data
                 let cards: Vec<MCPCard> = data_wrapper
                     .mcpServers
                     .iter()
                     .map(|api_card| {
-                        // API에서 보안 랭크 값을 가져옴 (없으면 기본값 "UNRATE" 사용)
+                        // get security rank value from API (default to "UNRATE" if not present)
                         let security_rank = match &api_card.security_rank {
                             Some(rank) => rank.clone(),
                             None => "UNRATE".to_string(),
@@ -285,23 +277,23 @@ pub async fn get_mcp_data(
                     })
                     .collect();
 
-                // 페이지 정보 추출
+                // extract page information
                 let end_cursor = match data_wrapper.pageInfo.endCursor {
                     Some(Value::Number(n)) => n.as_i64().map(|x| x as i32),
                     _ => None,
                 };
 
-                // 응답 생성
+                // create response
                 return Ok(MCPCardResponse {
                     cards,
                     page_info: PageInfoResponse {
                         has_next_page: data_wrapper.pageInfo.hasNextPage,
-                        end_cursor: end_cursor, 
+                        end_cursor: end_cursor,
                         total_items: data_wrapper.pageInfo.totalItems,
                     },
                 });
             } else {
-                // 데이터가 없거나 객체가 아닌 경우 빈 응답 반환
+                // return empty response if data is missing or not an object
                 return Ok(MCPCardResponse {
                     cards: Vec::new(),
                     page_info: PageInfoResponse {
@@ -312,20 +304,20 @@ pub async fn get_mcp_data(
                 });
             }
         } else {
-            // 오류 응답 처리
+            // handle error response
             let error_body = response
                 .text()
                 .await
-                .unwrap_or_else(|e| format!("응답 오류 본문 읽기 실패: {}", e));
+                .unwrap_or_else(|e| format!("failed to read error body: {}", e));
 
             return Err(api_error(
-                format!("서버 오류: {} - {}", status, error_body),
+                format!("server error: {} - {}", status, error_body),
                 Some(status_code),
             ));
         }
     }
 
-    // 내부 함수 실행 및 오류 변환
+    // execute internal function and convert error
     to_string_error(get_mcp_data_internal(&state.client, search_term, cursor_id).await)
 }
 
@@ -334,7 +326,7 @@ pub async fn get_mcp_detail_data(
     state: State<'_, AppState>,
     id: i32,
 ) -> Result<MCPCardDetail, String> {
-    // Load .env file in development mode (ignored if already loaded)
+    // load
     #[cfg(debug_assertions)]
     let _ = dotenv();
 
@@ -368,7 +360,7 @@ pub async fn get_mcp_detail_data(
                                     inner_mcp_server_value.clone(),
                                 ) {
                                     Ok(detail_data) => {
-                                        // API에서 보안 랭크 값을 가져옴 (없으면 기본값 "UNRATE" 사용)
+                                        // get security rank value from API (default to "UNRATE" if not present)
                                         let security_rank = match detail_data.security_rank {
                                             Some(rank) => rank,
                                             None => "UNRATE".to_string(),
@@ -426,7 +418,7 @@ pub async fn get_mcp_detail_data(
     }
 }
 
-/// Add MCP server configuration to Claude Desktop config file
+// Add MCP server configuration to Claude Desktop config file
 #[tauri::command]
 pub async fn add_mcp_server_config(
     app: AppHandle,
@@ -532,7 +524,7 @@ pub async fn add_mcp_server_config(
     Ok(())
 }
 
-/// Remove MCP server configuration from Claude Desktop config file
+// Remove MCP server configuration from Claude Desktop config file
 #[tauri::command]
 pub async fn remove_mcp_server_config(app: AppHandle, server_name: String) -> Result<(), String> {
     // Generate config file path
@@ -628,7 +620,7 @@ pub async fn remove_mcp_server_config(app: AppHandle, server_name: String) -> Re
     Ok(())
 }
 
-/// Restart Claude Desktop application
+// Restart Claude Desktop application
 #[tauri::command]
 pub async fn restart_claude_desktop(_app: AppHandle) -> Result<(), String> {
     // 1) Terminate all claude.exe processes (use precise filter)
@@ -639,7 +631,7 @@ pub async fn restart_claude_desktop(_app: AppHandle) -> Result<(), String> {
             "/FI",
             "IMAGENAME eq claude.exe",
         ])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW 플래그 추가
+        .creation_flags(0x08000000) // Add CREATE_NO_WINDOW flag
         .status()
         .map_err(|e| format!("Failed to execute taskkill: {}", e))?;
     match kill_status.code() {
@@ -691,7 +683,7 @@ pub async fn restart_claude_desktop(_app: AppHandle) -> Result<(), String> {
             "--disable-gpu-shader-disk-cache",
             "--disable-gpu",
         ])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW 플래그 추가
+        .creation_flags(0x08000000) // Add CREATE_NO_WINDOW flag
         .spawn()
         .map_err(|e| format!("Failed to start Claude Desktop: {}", e))?;
 
@@ -765,7 +757,7 @@ pub async fn get_installed_mcp_data(
                                                 .mcpServers
                                                 .iter()
                                                 .map(|api_card| {
-                                                    // API에서 보안 랭크 값을 가져옴 (없으면 기본값 "UNRATE" 사용)
+                                                    // get security rank value from API (default to "UNRATE" if not present)
                                                     let security_rank =
                                                         match &api_card.security_rank {
                                                             Some(rank) => rank.clone(),
@@ -880,8 +872,8 @@ pub async fn get_installed_mcp_data(
     }
 }
 
-/// Function to directly search for locally installed MCP servers
-/// Reads the configuration file directly, filters, and returns the results
+// Function to directly search for locally installed MCP servers
+// Reads the configuration file directly, filters, and returns the results
 #[tauri::command]
 pub async fn search_local_mcp_servers(
     app: AppHandle,
@@ -975,7 +967,7 @@ pub async fn search_local_mcp_servers(
     Ok(results)
 }
 
-/// Struct for local MCP server information
+// Struct for local MCP server information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalMCPServer {
     pub id: i32,
@@ -984,7 +976,7 @@ pub struct LocalMCPServer {
     pub args: Option<Vec<String>>,
 }
 
-/// Reads the content of mcplink_desktop_config.json and returns it as a string.
+// Reads the content of mcplink_desktop_config.json and returns it as a string.
 #[tauri::command]
 pub fn read_mcplink_config_content(app: AppHandle) -> Result<String, String> {
     let config_path = match std::env::consts::OS {
@@ -1053,8 +1045,8 @@ pub fn check_mcplink_config_exists(app: AppHandle) -> Result<bool, String> {
     Ok(mcplink_config_path.exists())
 }
 
-/// Ensures config files exist with default values
-/// Creates them if they don't exist
+// Ensures config files exist with default values
+// Creates them if they don't exist
 #[tauri::command]
 pub async fn ensure_config_files(app: AppHandle) -> Result<(), String> {
     // Load .env file in development mode (ignored if already loaded)
@@ -1136,8 +1128,8 @@ pub async fn ensure_config_files(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Monitors both configuration files and emits an event if either is missing
-/// This function should be called when you want to start watching the config files
+// Monitors both configuration files and emits an event if either is missing
+// This function should be called when you want to start watching the config files
 #[tauri::command]
 pub async fn start_config_watch(app: AppHandle) -> Result<(), String> {
     // We'll use a background task to periodically check the config files
@@ -1173,10 +1165,10 @@ pub async fn start_config_watch(app: AppHandle) -> Result<(), String> {
                                 }
                             }
                         }
-                        Err(e) => eprintln!("Error checking mcplink config: {}", e),
+                        Err(e) => (),
                     }
                 }
-                Err(e) => eprintln!("Error checking claude config: {}", e),
+                Err(e) => (),
             }
         }
     });
@@ -1184,13 +1176,13 @@ pub async fn start_config_watch(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Function to read the detailed settings of an installed MCP server
+// Function to read the detailed settings of an installed MCP server
 #[tauri::command]
 pub fn read_mcp_server_config(
     app: AppHandle,
     server_name: String,
 ) -> Result<MCPServerConfig, String> {
-    // 새로운 내부 함수 구현 (AppResult 사용)
+    // implement new internal function (use AppResult)
     fn read_mcp_server_config_internal(
         app: &AppHandle,
         server_name: &str,
@@ -1198,17 +1190,14 @@ pub fn read_mcp_server_config(
         // Create Claude directory path
         let claude_dir = match std::env::consts::OS {
             "windows" => {
-                let appdata = app
-                    .path()
-                    .app_data_dir()
-                    .map_err(|e| AppError::OsError {
-                        msg: format!("AppData 디렉토리 가져오기 실패: {}", e),
-                    })?;
+                let appdata = app.path().app_data_dir().map_err(|e| AppError::OsError {
+                    msg: format!("Failed to get AppData directory: {}", e),
+                })?;
                 appdata.parent().unwrap_or(&appdata).join("Claude")
             }
             _ => {
                 return Err(AppError::OsError {
-                    msg: "현재 Windows에서만 지원됩니다".to_string(),
+                    msg: "Currently only supported on Windows".to_string(),
                 });
             }
         };
@@ -1218,27 +1207,19 @@ pub fn read_mcp_server_config(
 
         if !config_path.exists() {
             return Err(AppError::ConfigError {
-                msg: "Claude 설정 파일이 존재하지 않습니다".to_string(),
+                msg: "Claude config file does not exist".to_string(),
             });
         }
 
         // Read configuration file
-        let config_str = fs::read_to_string(&config_path).map_err(|e| {
-            fs_error(
-                e,
-                &config_path.to_string_lossy(),
-            )
-        })?;
+        let config_str = fs::read_to_string(&config_path)
+            .map_err(|e| fs_error(e, &config_path.to_string_lossy()))?;
 
         // Parse configuration
-        let config: ClaudeDesktopConfig = serde_json::from_str(&config_str).map_err(|e| {
-            log_error(
-                AppError::JsonError {
-                    msg: format!("설정 파일 파싱 실패: {}", e),
-                },
-                "read_mcp_server_config",
-            )
-        })?;
+        let config: ClaudeDesktopConfig =
+            serde_json::from_str(&config_str).map_err(|e| AppError::JsonError {
+                msg: format!("Failed to parse config file: {}", e),
+            })?;
 
         // Check MCP server configuration
         let servers = config.mcpServers.unwrap_or_default();
@@ -1248,19 +1229,16 @@ pub fn read_mcp_server_config(
             Ok(server_config.clone())
         } else {
             Err(AppError::ConfigError {
-                msg: format!(
-                    "MCP 서버 '{}'가 설정에 없습니다",
-                    server_name
-                )
+                msg: format!("MCP server '{}' is not in the config", server_name),
             })
         }
     }
 
-    // 내부 함수 실행 및 오류 변환
+    // execute internal function and convert error
     to_string_error(read_mcp_server_config_internal(&app, &server_name))
 }
 
-/// Function to check if a server name is installed
+// Function to check if a server name is installed
 #[tauri::command]
 pub fn is_mcp_server_installed(app: AppHandle, server_name: String) -> Result<bool, String> {
     // Create Claude directory path
@@ -1299,10 +1277,9 @@ pub fn is_mcp_server_installed(app: AppHandle, server_name: String) -> Result<bo
     Ok(servers.contains_key(&server_name))
 }
 
-/// Function to reset MCP settings (excluding fallback server)
+// Function to reset MCP settings (excluding fallback server)
 #[tauri::command]
 pub fn reset_mcp_settings(app: AppHandle) -> Result<(), String> {
-    // 함수 내용 유지 (아래는 원래 코드를 다시 넣음)
     // Create Claude directory path
     let claude_dir = match std::env::consts::OS {
         "windows" => {
@@ -1392,410 +1369,32 @@ pub fn reset_mcp_settings(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// 테스트를 위한 앱 강제 활성화 명령
-#[tauri::command]
-pub fn test_force_activate() -> Result<(), String> {
-    // 디버그 로그 파일에 기록
-    let log_path = std::env::temp_dir().join("mcplink_test.log");
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] test_force_activate 명령 호출됨",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    // 활성화 로그 파일 경로
-    let activation_log_path = std::env::temp_dir().join("mcplink_activation.log");
-
-    // 활성화 로그 초기화
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&activation_log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] === 테스트 강제 활성화 시작 ===",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    // 앱 강제 활성화 시도
-    if let Err(e) = force_activate::force_app_to_foreground() {
-        // 오류 로깅
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&activation_log_path)
-        {
-            use std::io::Write;
-            let _ = writeln!(
-                file,
-                "[{}] 테스트 활성화 오류: {}",
-                chrono::Local::now().format("%H:%M:%S"),
-                e
-            );
-        }
-        return Err(e);
-    }
-
-    // 성공 로그
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] test_force_activate 명령 성공",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    // 활성화 로그 완료
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&activation_log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] === 테스트 강제 활성화 완료 ===",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    Ok(())
-}
-
-// 테스트를 위한 키워드 검색 기능
-#[tauri::command]
-pub fn test_search_keyword(app: AppHandle, keyword: String) -> Result<(), String> {
-    // 디버그 로그 파일에 기록
-    let log_path = std::env::temp_dir().join("mcplink_test.log");
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] test_search_keyword 명령 호출됨: {}",
-            chrono::Local::now().format("%H:%M:%S"),
-            keyword
-        );
-    }
-
-    // 앱 강제 활성화 시도
-    force_activate::force_app_to_foreground()?;
-
-    // Window 찾아서 search-keyword 이벤트 발생
-    if let Some(window) = app.get_webview_window("main") {
-        use tauri::Emitter;
-        let _ = window.emit("search-keyword", keyword.clone());
-    }
-
-    // 성공 로그
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] test_search_keyword 명령 성공",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    Ok(())
-}
-
-// 알림 클릭 시뮬레이션 함수 (알림 클릭 테스트용)
-#[tauri::command]
-pub fn simulate_notification_click(app: AppHandle, keyword: String) -> Result<(), String> {
-    // 디버그 로그 파일에 기록
-    let log_path = std::env::temp_dir().join("mcplink_test.log");
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] simulate_notification_click 명령 호출됨: {}",
-            chrono::Local::now().format("%H:%M:%S"),
-            keyword
-        );
-    }
-
-    // 알림 클릭 로그 파일 경로
-    let click_log_path = std::env::temp_dir().join("mcplink_notification_click.log");
-
-    // 알림 클릭 시뮬레이션 로그 기록
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&click_log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] 알림 클릭 시뮬레이션: {}",
-            chrono::Local::now().format("%H:%M:%S"),
-            keyword
-        );
-    }
-
-    // 키워드를 임시 파일에 저장 (감시 스레드에서 처리하도록)
-    let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-    if let Ok(mut file) = std::fs::File::create(&keyword_path) {
-        use std::io::Write;
-        if let Err(e) = write!(file, "{}", keyword) {
-            return Err(format!("키워드 파일 작성 오류: {}", e));
-        }
-
-        // 로그 파일에 기록
-        if let Ok(mut log_file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&click_log_path)
-        {
-            use std::io::Write;
-            let _ = writeln!(
-                log_file,
-                "[{}] 알림 클릭 처리: 키워드 파일 생성됨 (작업 ID: {})",
-                chrono::Local::now().format("%H:%M:%S"),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-            );
-        }
-    } else {
-        return Err("키워드 파일을 생성할 수 없습니다".to_string());
-    }
-
-    // 1. 키워드 상태 설정 (KeywordState 상태 객체 사용)
-    if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
-        keyword_state.set_keyword(keyword.clone(), "notification_click", 1);
-        keyword_state.set_pending(true);
-        keyword_state.update_click_time();
-        
-        // 로그 파일에 기록
-        if let Ok(mut log_file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&click_log_path)
-        {
-            use std::io::Write;
-            let _ = writeln!(
-                log_file,
-                "[{}] KeywordState에 키워드 설정됨: {}",
-                chrono::Local::now().format("%H:%M:%S"),
-                keyword
-            );
-        }
-    }
-
-    // 앱 강제 활성화 시도
-    let activation_result = force_activate::force_app_to_foreground();
-
-    // 활성화 시도 로그
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] simulate_notification_click: 앱 활성화 시도 결과: {}",
-            chrono::Local::now().format("%H:%M:%S"),
-            if activation_result.is_ok() {
-                "성공"
-            } else {
-                "실패 (직접 이벤트 발생 시도)"
-            }
-        );
-    }
-    
-    // 앱 활성화 이벤트 발생 (개선된 버전)
-    let event_result = force_activate::emit_app_activated_event(&app);
-    
-    // 이벤트 발생 로그
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] 앱 활성화 이벤트 발생 결과: {}",
-            chrono::Local::now().format("%H:%M:%S"),
-            if event_result.is_ok() { "성공" } else { "실패" }
-        );
-    }
-    
-    // 직접 search-keyword 이벤트 발생 (이중 안전장치)
-    if let Some(window) = app.get_webview_window("main") {
-        use tauri::Emitter;
-        let emit_result = window.emit("search-keyword", keyword.clone());
-        
-        // 로그 파일에 기록
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path)
-        {
-            use std::io::Write;
-            let _ = writeln!(
-                file,
-                "[{}] 키워드 이벤트 직접 발생 결과: {}",
-                chrono::Local::now().format("%H:%M:%S"),
-                if emit_result.is_ok() { "성공" } else { "실패" }
-            );
-        }
-    }
-
-    // 성공 로그
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] simulate_notification_click 명령 성공",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    Ok(())
-}
-
-/// 앱 활성화 상태를 확인하고 키워드가 있으면 표시하는 함수 - 개선된 버전
+// check app activation state and show keyword if exists - improved version
 #[tauri::command]
 pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, String> {
-    // 디버그 로그 설정
-    let log_path = std::env::temp_dir().join("mcplink_activation.log");
-    
-    // 로그 시작
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] === check_and_mark_app_activated 시작 ===",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    // 1. 먼저 키워드 파일 확인
+    // 1. first check keyword file
     let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
     let file_keyword = if keyword_path.exists() {
-        // 파일의 수정 시간 확인
+        // check file modification time
         if let Ok(metadata) = std::fs::metadata(&keyword_path) {
             if let Ok(modified) = metadata.modified() {
                 if let Ok(elapsed) = modified.elapsed() {
-                    // 10초 이상 된 파일은 무시하고 삭제
+                    // ignore files older than 10 seconds and delete
                     if elapsed.as_secs() > 10 {
                         let _ = std::fs::remove_file(&keyword_path);
-                        
-                        // 로그 기록
-                        if let Ok(mut file) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .append(true)
-                            .open(&log_path)
-                        {
-                            use std::io::Write;
-                            let _ = writeln!(
-                                file,
-                                "[{}] 오래된 키워드 파일 삭제됨 ({}초)",
-                                chrono::Local::now().format("%H:%M:%S"),
-                                elapsed.as_secs()
-                            );
-                        }
                         None
                     } else {
-                        // 파일이 최신이면 읽기
+                        // read file if it's recent
                         match std::fs::read_to_string(&keyword_path) {
                             Ok(content) => {
                                 let trimmed = content.trim();
                                 if !trimmed.is_empty() {
-                                    // 로그 기록
-                                    if let Ok(mut file) = std::fs::OpenOptions::new()
-                                        .create(true)
-                                        .write(true)
-                                        .append(true)
-                                        .open(&log_path)
-                                    {
-                                        use std::io::Write;
-                                        let _ = writeln!(
-                                            file,
-                                            "[{}] 키워드 파일에서 발견: {} ({}초 전)",
-                                            chrono::Local::now().format("%H:%M:%S"),
-                                            trimmed,
-                                            elapsed.as_secs()
-                                        );
-                                    }
                                     Some(trimmed.to_string())
                                 } else {
                                     None
                                 }
                             }
-                            Err(e) => {
-                                // 파일 읽기 오류 로그
-                                if let Ok(mut file) = std::fs::OpenOptions::new()
-                                    .create(true)
-                                    .write(true)
-                                    .append(true)
-                                    .open(&log_path)
-                                {
-                                    use std::io::Write;
-                                    let _ = writeln!(
-                                        file,
-                                        "[{}] 키워드 파일 읽기 오류: {}",
-                                        chrono::Local::now().format("%H:%M:%S"),
-                                        e
-                                    );
-                                }
-                                None
-                            }
+                            Err(_e) => None,
                         }
                     }
                 } else {
@@ -1808,80 +1407,39 @@ pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, St
             None
         }
     } else {
-        // 파일 없음 로그
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path)
-        {
-            use std::io::Write;
-            let _ = writeln!(
-                file,
-                "[{}] 키워드 파일이 존재하지 않음",
-                chrono::Local::now().format("%H:%M:%S")
-            );
-        }
         None
     };
 
-    // 2. KeywordState 확인
-    let state_keyword = if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
-        // 앱 활성화 상태 설정
-        keyword_state.set_app_activated(true);
-        
-        // 대기 중인 키워드 확인
-        if keyword_state.is_pending() || keyword_state.has_keyword() {
-            let kw = keyword_state.take_keyword();
-            
-            // 로그 기록
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&log_path)
-            {
-                use std::io::Write;
-                let _ = writeln!(
-                    file,
-                    "[{}] KeywordState에서 키워드: {:?}",
-                    chrono::Local::now().format("%H:%M:%S"),
-                    kw
-                );
+    // 2. check KeywordState
+    let state_keyword =
+        if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
+            // set app activated state
+            keyword_state.set_app_activated(true);
+
+            // check pending keyword
+            if keyword_state.is_pending() || keyword_state.has_keyword() {
+                let kw = keyword_state.take_keyword();
+                kw
+            } else {
+                None
             }
-            
-            kw
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
-    // 3. 최종 키워드 결정 (파일 우선)
+    // 3. final keyword decision (file first)
     let final_keyword = file_keyword.or(state_keyword);
 
-    // 4. 키워드가 있으면 이벤트 발생
+    // 4. if keyword exists, emit event
     if let Some(ref keyword) = final_keyword {
         if let Some(window) = app.get_webview_window("main") {
             use tauri::Emitter;
-            let result = window.emit("search-keyword", keyword.clone());
-            
-            // 로그 기록
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&log_path)
-            {
-                use std::io::Write;
-                let _ = writeln!(
-                    file,
-                    "[{}] search-keyword 이벤트 발생 결과: {:?}",
-                    chrono::Local::now().format("%H:%M:%S"),
-                    result.is_ok()
-                );
-            }
+            let _result = window.emit("search-keyword", keyword.clone());
+        }
+
+        // after keyword processing, delete file
+        if keyword_path.exists() {
+            let _ = std::fs::remove_file(&keyword_path);
         }
         
         // 키워드 처리 후 파일 삭제
@@ -1890,96 +1448,54 @@ pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, St
         }
     }
 
-    // 로그 종료
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] === check_and_mark_app_activated 종료 (결과: {:?}) ===",
-            chrono::Local::now().format("%H:%M:%S"),
-            final_keyword
-        );
-    }
-
     Ok(final_keyword)
 }
 
-/// 앱 활성화를 알리고 앱을 전면으로 가져오는 함수 (개선된 로깅 사용)
+// notify app activation and bring app to front - improved logging
 #[tauri::command]
 pub fn notify_app_activated(app: AppHandle) -> Result<(), String> {
-    // 새로운 통합 로깅 시스템 사용
-    crate::log_message(
-        crate::LogLevel::Info,
-        crate::LogCategory::Activation,
-        "notify_app_activated",
-        "앱 활성화 알림 명령 호출됨"
-    );
-    
-    // 앱 활성화 상태 업데이트 (KeywordState 사용)
+    // update app activated state (use KeywordState)
     if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
-        // 앱 활성화 상태 설정
+        // set app activated state
         keyword_state.set_app_activated(true);
-        
-        // 앱 활성화 시간과 가장 최근 알림 클릭 시간의 차이 기록
-        let time_diff = keyword_state.get_last_click_time().map(|t| {
-            let elapsed = t.elapsed();
-            format!("{}초 전", elapsed.as_secs())
-        }).unwrap_or_else(|| "알 수 없음".to_string());
-        
-        // 로그 기록
-        crate::log_message(
-            crate::LogLevel::Debug,
-            crate::LogCategory::Activation,
-            "notify_app_activated",
-            &format!("마지막 알림 클릭 시간: {}", time_diff)
-        );
+
+        // record time difference between app activation and most recent notification click
+        let time_diff = keyword_state
+            .get_last_click_time()
+            .map(|t| {
+                let elapsed = t.elapsed();
+                format!("{} seconds ago", elapsed.as_secs())
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+
+        // log message removed for performance
     }
-    
-    // 앱 활성화 이벤트 발생
+
+    // emit app activated event
     let result = crate::force_activate::emit_app_activated_event(&app);
-    
-    // 결과 로깅
-    if let Err(ref e) = result {
-        crate::log_message(
-            crate::LogLevel::Error,
-            crate::LogCategory::Activation,
-            "notify_app_activated",
-            &format!("앱 활성화 이벤트 발생 실패: {}", e)
-        );
-    } else {
-        crate::log_message(
-            crate::LogLevel::Info,
-            crate::LogCategory::Activation,
-            "notify_app_activated",
-            "앱 활성화 이벤트 발생 성공"
-        );
-    }
-    
+
+    // log messages removed for performance
+
     result
 }
 
-/// 설치된 MCP 개수를 가져오는 함수
+// get installed MCP count
 #[tauri::command]
 pub fn get_installed_count(app: AppHandle) -> Result<i32, String> {
-    // mcplink_desktop_config.json 파일 읽기
+    // read mcplink_desktop_config.json file
     let mcplink_content = read_mcplink_config_content(app)?;
 
-    // 파일 내용 파싱
+    // parse file content
     let config: Map<String, Value> = serde_json::from_str(&mcplink_content)
         .map_err(|e| format!("Failed to parse mcplink config: {}", e))?;
 
-    // 설치된 MCP 개수 계산 (fallback 서버 ID -1 제외)
+    // calculate installed MCP count (exclude fallback server ID -1)
     let count = config.keys().filter(|&key| key != "-1").count() as i32;
 
     Ok(count)
 }
 
-/// MCP 리스트 총 개수를 가져오는 함수
+// get total MCP list count
 #[tauri::command]
 pub async fn get_list_count(state: State<'_, AppState>) -> Result<i32, String> {
     // Load .env file in development mode (ignored if already loaded)
@@ -2002,7 +1518,7 @@ pub async fn get_list_count(state: State<'_, AppState>) -> Result<i32, String> {
         })
     };
 
-    // 한 개의 항목만 요청해서 전체 개수만 확인
+    // request only one item to get total count
     let request_url = format!("{}?size=1", base_url);
 
     match state.client.get(&request_url).send().await {
@@ -2026,7 +1542,7 @@ pub async fn get_list_count(state: State<'_, AppState>) -> Result<i32, String> {
                                         }
                                     }
                                 } else {
-                                    // 데이터가 없거나 접근할 수 없는 경우
+                                    // no data or inaccessible
                                     return Ok(0);
                                 }
                             }
@@ -2052,40 +1568,22 @@ pub async fn get_list_count(state: State<'_, AppState>) -> Result<i32, String> {
     }
 }
 
-/// 키워드 파일 삭제 함수
+// delete keyword file
 #[tauri::command]
 pub fn delete_keyword_file() -> Result<(), String> {
     let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-    
+
     if keyword_path.exists() {
         match fs::remove_file(&keyword_path) {
-            Ok(_) => {
-                // 로그 기록
-                let log_path = std::env::temp_dir().join("mcplink_activation.log");
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    use std::io::Write;
-                    let _ = writeln!(
-                        file,
-                        "[{}] 키워드 파일 삭제됨: {:?}",
-                        chrono::Local::now().format("%H:%M:%S"),
-                        keyword_path
-                    );
-                }
-                Ok(())
-            }
-            Err(e) => Err(format!("키워드 파일 삭제 실패: {}", e))
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("failed to delete keyword file: {}", e)),
         }
     } else {
-        Ok(()) // 파일이 없으면 성공으로 처리
+        Ok(()) // if file not found, success
     }
 }
 
-/// 키워드 파일의 나이를 확인하는 함수
+// check keyword file age
 #[derive(Serialize)]
 pub struct KeywordFileInfo {
     pub keyword: String,
@@ -2095,77 +1593,57 @@ pub struct KeywordFileInfo {
 #[tauri::command]
 pub fn check_keyword_file_age() -> Result<Option<KeywordFileInfo>, String> {
     let keyword_path = std::env::temp_dir().join("mcplink_last_keyword.txt");
-    
+
     if !keyword_path.exists() {
         return Ok(None);
     }
-    
-    // 파일 메타데이터 읽기
+
+    // read file metadata
     match fs::metadata(&keyword_path) {
         Ok(metadata) => {
-            // 파일 수정 시간 가져오기
+            // get file modification time
             match metadata.modified() {
                 Ok(modified_time) => {
-                    // 현재 시간과의 차이 계산
+                    // calculate time difference between current time and file modification time
                     match modified_time.elapsed() {
                         Ok(duration) => {
                             let age_ms = duration.as_millis() as u64;
-                            
-                            // 파일 내용 읽기
+
+                            // read file content
                             match fs::read_to_string(&keyword_path) {
                                 Ok(keyword) => {
                                     let keyword = keyword.trim().to_string();
                                     if keyword.is_empty() {
                                         return Ok(None);
                                     }
-                                    
-                                    Ok(Some(KeywordFileInfo {
-                                        keyword,
-                                        age_ms,
-                                    }))
+
+                                    Ok(Some(KeywordFileInfo { keyword, age_ms }))
                                 }
-                                Err(_) => Ok(None)
+                                Err(_) => Ok(None),
                             }
                         }
-                        Err(_) => Ok(None)
+                        Err(_) => Ok(None),
                     }
                 }
-                Err(_) => Ok(None)
+                Err(_) => Ok(None),
             }
         }
-        Err(_) => Ok(None)
+        Err(_) => Ok(None),
     }
 }
 
-/// 설치된 MCP 개수를 가져오는 함수
+// get installed MCP count
 #[tauri::command]
 pub fn get_installed_mcp_count(app: AppHandle) -> Result<usize, String> {
-    // TODO: 실제 MCP 설치 확인 로직 구현
-    // 현재는 더미 데이터 반환
+    // TODO: implement actual MCP installation check logic
+    // currently, return dummy data
     Ok(3)
 }
 
-/// 키워드 상태를 완전히 정리하는 함수
+// clean up keyword state
 #[tauri::command]
 pub fn clear_keyword_state(app: AppHandle) -> Result<(), String> {
-    // 디버그 로그 설정
-    let log_path = std::env::temp_dir().join("mcplink_activation.log");
-    
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] === clear_keyword_state 시작 ===",
-            chrono::Local::now().format("%H:%M:%S")
-        );
-    }
-
-    // 1. 키워드 파일들 삭제
+    // 1. delete keyword files
     let temp_dir = std::env::temp_dir();
     let files_to_clean = [
         temp_dir.join("mcplink_last_keyword.txt"),
@@ -2174,72 +1652,13 @@ pub fn clear_keyword_state(app: AppHandle) -> Result<(), String> {
 
     for file_path in files_to_clean.iter() {
         if file_path.exists() {
-            if let Err(e) = std::fs::remove_file(file_path) {
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    use std::io::Write;
-                    let _ = writeln!(
-                        file,
-                        "[{}] 파일 삭제 실패: {:?} - {}",
-                        chrono::Local::now().format("%H:%M:%S"),
-                        file_path,
-                        e
-                    );
-                }
-            } else {
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    use std::io::Write;
-                    let _ = writeln!(
-                        file,
-                        "[{}] 파일 삭제 성공: {:?}",
-                        chrono::Local::now().format("%H:%M:%S"),
-                        file_path
-                    );
-                }
-            }
+            let _ = std::fs::remove_file(file_path);
         }
     }
 
-    // 2. KeywordState 정리
+    // 2. clean up KeywordState
     if let Some(keyword_state) = app.try_state::<crate::notification_system::KeywordState>() {
         keyword_state.clear_all();
-        
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_path)
-        {
-            use std::io::Write;
-            let _ = writeln!(
-                file,
-                "[{}] KeywordState 정리 완료",
-                chrono::Local::now().format("%H:%M:%S")
-            );
-        }
-    }
-
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(&log_path)
-    {
-        use std::io::Write;
-        let _ = writeln!(
-            file,
-            "[{}] === clear_keyword_state 완료 ===",
-            chrono::Local::now().format("%H:%M:%S")
-        );
     }
 
     Ok(())

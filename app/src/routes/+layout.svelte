@@ -21,15 +21,16 @@
   import gsap from "gsap"
 
   // --- Scrollable Container Context ---
-  // export const scrollableContainerKey = Symbol() // contexts.ts로 이동
+  // export const scrollableContainerKey = Symbol()
+  // moved to contexts.ts
   let mainElement: HTMLElement
 
   // --- Configuration for app appearance ---
-  // Window bar (title bar) styling - 통일된 디자인을 위해 base-100 사용
+  // Window bar (title bar) styling - for unified design, use base-100
   const windowBarBackgroundClass = "bg-base-100"
   const windowBarContentColorClass = "text-base-content"
 
-  // Tab bar styling - 상단바와 통일
+  // Tab bar styling - for unified design, use base-100
   const tabBarBackgroundClass = "bg-base-100"
   const tabBarContentColorClass = "text-base-content"
 
@@ -49,18 +50,18 @@
   let unlistenNavigateTo: UnlistenFn | undefined
   let unlistenConfigFiles: UnlistenFn | undefined
   let unlistenFocusChange: UnlistenFn | undefined
-  let unlistenSearchKeyword: UnlistenFn | undefined // 새로운 search-keyword-event 리스너를 위한 변수
-  let unlistenSearchKeywordEvent: UnlistenFn | undefined // search-keyword 이벤트 리스너 추가
+  let unlistenSearchKeyword: UnlistenFn | undefined // for new search-keyword-event listener
+  let unlistenSearchKeywordEvent: UnlistenFn | undefined // for search-keyword event listener
 
   // --- Svelte reactive state ---
   let activeTabPath = "/"
   $: isFirstInstallPage = $page?.url?.pathname === "/first-install"
   $: isPopupPage = $page?.url?.pathname === "/popup"
 
-  // wheel 이벤트 리스너 설정을 위한 reactive 블록
+  // reactive block for setting up wheel event listener
   $: if (mainElement && browser) {
     setContext(scrollableContainerKey, mainElement)
-    // wheel 이벤트 리스너 추가
+    // add wheel event listener
     mainElement.addEventListener("wheel", handleWheel, { passive: true })
     mainElement.addEventListener("touchstart", handleWheel, { passive: true })
   }
@@ -69,7 +70,7 @@
   // Handles notification clicks or automatic activation events
   async function handleAppActivated() {
     try {
-      const response = await invoke<any>("check_and_mark_app_activated", {}) // 타입을 any로 변경 또는 구체적인 타입 지정
+      const response = await invoke<any>("check_and_mark_app_activated", {}) // change type to any or specify concrete type
 
       // Extract keyword from the response
       let keyword = null
@@ -77,13 +78,13 @@
       // Handle differently based on data type (to accommodate various ways Rust's Option<String> is converted to JSON)
       if (response && typeof response === "object") {
         if (Object.prototype.hasOwnProperty.call(response, "Some")) {
-          // 안전한 접근으로 변경
+          // change to safe access
           // Handle Rust's Option<String>::Some
-          keyword = (response as { Some: string | null }).Some // 타입 단언 추가
+          keyword = (response as { Some: string | null }).Some // add type assertion
         } else if (Object.prototype.hasOwnProperty.call(response, "0")) {
-          // 안전한 접근으로 변경
+          // change to safe access
           // Handle if converted to an array
-          keyword = (response as Array<string | null>)[0] // 타입 단언 추가
+          keyword = (response as Array<string | null>)[0] // add type assertion
         }
       } else if (response && typeof response === "string" && response.trim() !== "") {
         // If converted directly to a string
@@ -91,23 +92,21 @@
       }
 
       if (keyword) {
-        // 키워드가 있으면 검색 실행 함수 호출
+        // if keyword exists, call search execution function
         handleKeywordSearch(keyword)
       } else {
       }
-    } catch (err) {
-      console.error("[FRONTEND][Notification] Error in app activation handler:", err)
-    }
+    } catch (err) {}
   }
 
-  // 검색 키워드 처리 함수 분리
+  // separate search keyword processing function
   async function handleKeywordSearch(keyword: string) {
     if (!keyword || typeof keyword !== "string" || !keyword.trim()) {
       return
     }
 
     try {
-      // 스크롤 위치를 즉시 상단으로 애니메이션 적용
+      // immediately apply animation to scroll position to top
       if (mainElement) {
         smoothScrollToTop()
       }
@@ -122,9 +121,7 @@
 
           // Add a short delay to ensure the window is definitely visible
           await new Promise((resolve) => setTimeout(resolve, 100))
-        } catch (e) {
-          console.error("[FRONTEND][Notification] Frontend window activation failed:", e)
-        }
+        } catch (e) {}
       }
 
       // URL encode the keyword to include it as a query parameter
@@ -149,16 +146,12 @@
             setTimeout(async () => {
               try {
                 if (tauriWindow) {
-                  // Null 체크 추가
+                  // add null check
                   await tauriWindow.setAlwaysOnTop(false)
                 }
-              } catch (e) {
-                console.error("[FRONTEND][Notification] Error removing always-on-top:", e)
-              }
+              } catch (e) {}
             }, 5000)
-          } catch (e) {
-            console.error("[FRONTEND][Notification] Frontend focus error:", e)
-          }
+          } catch (e) {}
         }
 
         // 3. Handle uniformly whether URL navigation succeeds or fails
@@ -177,61 +170,56 @@
           await tauriWindow.setFocus()
         }
       } catch (err) {
-        console.error("[FRONTEND][Notification] Navigation error:", err)
-
         // Attempt to force a path change even if an error occurs
         window.location.href = targetUrl
       }
-    } catch (err) {
-      console.error("[FRONTEND] Error processing keyword:", err)
-    }
+    } catch (err) {}
   }
 
   // --- Lifecycle and Subscriptions ---
   onMount(async () => {
-    // 개선된 토스트 시스템 초기화
+    // improved toast system initialization
     if (browser) {
       initToastSystem()
 
-      // 단순화된 이벤트 리스너 - 활성 탭 경로만 업데이트
+      // simplified event listener - update only active tab path
       window.addEventListener("navigate-to-event", ((event: CustomEvent) => {
         if (event.detail && event.detail.path) {
-          // 이벤트로 받은 활성 탭 경로 설정
+          // set active tab path received from event
           activeTabPath = event.detail.path
         }
       }) as EventListener)
 
-      // 데이터 스토어 초기화
+      // initialize data store
       setLoaded(false)
 
-      // 페이지 전환 간에 공유될 데이터 로드
+      // load shared data to be shared between page transitions
       try {
-        // 여기서 앱에 필요한 공통 데이터를 로드
-        // 예: 설치된 MCP 수, MCP 리스트 수 등의 데이터
+        // load common data needed for the app
+        // e.g. data for installed MCP count, MCP list count, etc.
 
-        // 예시 데이터 로드 (실제로는 invoke 등을 통해 데이터를 가져와야 함)
+        // load example data (in reality, data should be loaded via invoke, etc.)
         const installedCount = await invoke("get_installed_count").catch(() => 0)
         const listCount = await invoke("get_list_count").catch(() => 0)
 
         updateCount("installedCount", installedCount as number)
         updateCount("listCount", listCount as number)
 
-        // 데이터 로드 완료 표시
+        // show data load complete
         setLoaded(true)
       } catch (error) {
-        console.error("데이터 로드 중 오류:", error)
-        // 데이터 로드 실패해도 앱은 계속 동작하도록 로드 완료 표시
+        // even if data load fails, the app will continue to operate
         setLoaded(true)
       }
 
-      // URI 스킴 프로토콜 핸들러는 deep-link 플러그인으로 대체됨
-      // 이벤트 리스너로 처리하는 방식으로 변경
+      // URI scheme protocol handler is replaced with deep-link plugin
+      // change to handle via event listener
       unlistenSearchKeyword = await listen("search-keyword-event", async (event) => {
         const keyword = event.payload as string
         await handleKeywordSearch(keyword)
       })
 
-      // 'search-keyword' 이벤트 리스너 추가
+      // add 'search-keyword' event listener
       unlistenSearchKeywordEvent = await listen("search-keyword", async (event) => {
         const keyword = event.payload as string
         await handleKeywordSearch(keyword)
@@ -269,28 +257,23 @@
           }
         }
       } catch (e) {
-        console.error("[Layout] OS detection error:", e)
         currentPlatform = "unknown"
       }
     }
 
     if (typeof window !== "undefined" && "__TAURI__" in window) {
       try {
-        // 윈도우 핸들 초기화를 더 안정적으로 처리
+        // initialize window handle more stably
         tauriWindow = WebviewWindow.getCurrent()
-        
-        // 초기화 실패 시 재시도
+
+        // if initialization fails, retry
         if (!tauriWindow) {
-          console.warn("초기 윈도우 핸들 가져오기 실패, 재시도 중...")
           setTimeout(() => {
             try {
               tauriWindow = WebviewWindow.getCurrent()
               if (tauriWindow) {
-                console.log("윈도우 핸들 재시도 성공")
               }
-            } catch (e) {
-              console.error("윈도우 핸들 재시도 실패:", e)
-            }
+            } catch (e) {}
           }, 500)
         }
 
@@ -331,24 +314,18 @@
               if (currentPath === "/first-install") return
 
               // Extract which files are missing from the event payload
-              const payload = event.payload as { claudeConfigExists?: boolean; mcplinkConfigExists?: boolean } // 타입 단언 추가
+              const payload = event.payload as { claudeConfigExists?: boolean; mcplinkConfigExists?: boolean } // add type assertion
               const { claudeConfigExists, mcplinkConfigExists } = payload
 
               // If any config file is missing, redirect to first-install page
               if (claudeConfigExists === false || mcplinkConfigExists === false) {
-                // 명시적으로 false 비교
+                // explicitly compare false
                 await goto("/first-install", { replaceState: true })
               }
-            } catch (error) {
-              console.error("[Config Watch] Failed to handle config files event:", error)
-            }
+            } catch (error) {}
           })
-        } catch (error) {
-          console.error("[Config Watch] Failed to start config watch:", error)
-        }
-      } catch (error) {
-        console.error("[Layout] Error during Tauri initialization:", error)
-      }
+        } catch (error) {}
+      } catch (error) {}
     }
   })
 
@@ -363,58 +340,57 @@
     if (unlistenNavigateTo) unlistenNavigateTo()
     if (unlistenConfigFiles) unlistenConfigFiles()
     if (unlistenFocusChange) unlistenFocusChange()
-    if (unlistenSearchKeyword) unlistenSearchKeyword() // 리스너 해제
-    if (unlistenSearchKeywordEvent) unlistenSearchKeywordEvent() // 리스너 해제
+    if (unlistenSearchKeyword) unlistenSearchKeyword() // remove listener
+    if (unlistenSearchKeywordEvent) unlistenSearchKeywordEvent() // remove listener
 
-    // 진행 중인 스크롤 애니메이션이 있다면 중단
+    // if there is a scroll animation in progress, stop it
     if (currentScrollAnimation) {
       currentScrollAnimation.kill()
       currentScrollAnimation = null
     }
 
-    // wheel 및 touch 이벤트 리스너 제거
+    // remove wheel and touch event listeners
     if (browser && mainElement) {
       mainElement.removeEventListener("wheel", handleWheel)
       mainElement.removeEventListener("touchstart", handleWheel)
     }
 
-    // 커스텀 이벤트 리스너 제거
+    // remove custom event listeners
     if (browser) {
-      // 이벤트 리스너 제거 시 빈 함수로 제거하면 실제로 제거되지 않음
-      // 대신 null 참조 지정으로 가비지 컬렉션에 의해 자연스럽게 정리되도록 함
-      // 이벤트 리스너는 앱 종료 시에만 정리되므로 실제로 여기서 명시적 제거는 불필요함
+      // when removing event listeners, specify null to allow garbage collection
+      // event listeners are only cleaned up when the app is closed, so it is not actually necessary to remove them here
     }
   })
 
-  // 진행 중인 스크롤 애니메이션 참조를 저장할 변수
+  // variable to store reference to ongoing scroll animation
   let currentScrollAnimation: gsap.core.Tween | null = null
 
-  // 스크롤 위치를 확인하고 스크롤 애니메이션을 실행하는 함수
+  // function to check scroll position and execute scroll animation
   function smoothScrollToTop() {
     if (!mainElement) return
 
-    // 현재 스크롤 위치가 1픽셀 이상인 경우에만 애니메이션 적용
+    // apply animation only if current scroll position is 1 pixel or more
     if (mainElement.scrollTop > 1) {
-      // 이미 진행 중인 애니메이션이 있으면 중단
+      // if there is already an ongoing animation, stop it
       if (currentScrollAnimation) {
         currentScrollAnimation.kill()
         currentScrollAnimation = null
       }
 
-      // GSAP을 사용하여 부드러운 스크롤 애니메이션 적용
+      // use GSAP to apply smooth scroll animation
       currentScrollAnimation = gsap.to(mainElement, {
         scrollTop: 0,
-        duration: 0.6, // 애니메이션 지속 시간 (초)
-        ease: "power2.out", // 가속도 곡선 (easing)
+        duration: 0.6, // animation duration (seconds)
+        ease: "power2.out", // acceleration curve (easing)
         onComplete: () => {
-          // 애니메이션 완료 시 참조 제거
+          // remove reference when animation is complete
           currentScrollAnimation = null
         },
       })
     }
   }
 
-  // 마우스 휠 이벤트 시 애니메이션 중단 함수
+  // function to stop animation when mouse wheel event occurs
   function handleWheel() {
     if (currentScrollAnimation) {
       currentScrollAnimation.kill()
@@ -422,26 +398,24 @@
     }
   }
 
-  // --- Window control functions (개선된 버전) ---
+  // --- Window control functions (improved version) ---
   async function minimizeWindow() {
     try {
-      // tauriWindow가 없으면 현재 창 직접 가져오기
+      // if tauriWindow is not available, get current window directly
       const window = tauriWindow || WebviewWindow.getCurrent()
       if (window) {
         await window.minimize()
       } else {
-        console.error("창을 찾을 수 없어 최소화할 수 없습니다")
-        showToast("창을 최소화할 수 없습니다", "error")
+        showToast("cannot minimize window", "error")
       }
     } catch (e) {
-      console.error("창 최소화 오류:", e)
-      showToast("창 최소화 중 오류가 발생했습니다", "error")
+      showToast("error minimizing window", "error")
     }
   }
-  
+
   async function maximizeWindow() {
     try {
-      // tauriWindow가 없으면 현재 창 직접 가져오기
+      // if tauriWindow is not available, get current window directly
       const window = tauriWindow || WebviewWindow.getCurrent()
       if (window) {
         const isMaximized = await window.isMaximized()
@@ -451,28 +425,24 @@
           await window.maximize()
         }
       } else {
-        console.error("창을 찾을 수 없어 최대화할 수 없습니다")
-        showToast("창을 최대화할 수 없습니다", "error")
+        showToast("cannot maximize window", "error")
       }
     } catch (e) {
-      console.error("창 최대화 오류:", e)
-      showToast("창 최대화 중 오류가 발생했습니다", "error")
+      showToast("error maximizing window", "error")
     }
   }
-  
+
   async function hideToTray() {
     try {
-      // tauriWindow가 없으면 현재 창 직접 가져오기
+      // if tauriWindow is not available, get current window directly
       const window = tauriWindow || WebviewWindow.getCurrent()
       if (window) {
         await window.hide()
       } else {
-        console.error("창을 찾을 수 없어 숨길 수 없습니다")
-        showToast("창을 숨길 수 없습니다", "error")
+        showToast("cannot hide window", "error")
       }
     } catch (e) {
-      console.error("창 숨기기 오류:", e)
-      showToast("창 숨기기 중 오류가 발생했습니다", "error")
+      showToast("error hiding window", "error")
     }
   }
 
@@ -480,17 +450,17 @@
   $: currentActivePageConfig = (() => {
     if (activeTabPath === settingsTab.path) return settingsTab
 
-    // 정확히 일치하는 탭 찾기
+    // find exact match for tab
     const foundTab = tabs.find((t) => activeTabPath === t.path)
-    return foundTab || tabs.find((t) => t.path === "/Installed-MCP") || tabs[0] // 기본값
+    return foundTab || tabs.find((t) => t.path === "/Installed-MCP") || tabs[0] // default value
   })()
 
-  // 배경색과 글자색을 활성화된 탭에 따라 반응형으로 계산
+  // calculate background color and text color reactively based on active tab
   $: activeMainAreaBackgroundColor = isFirstInstallPage || isPopupPage ? "var(--color-base-100)" : `var(--${currentActivePageConfig.mainClass.replace("bg-", "color-")})`
 
   $: activeMainAreaContentColor = isFirstInstallPage || isPopupPage ? "var(--color-base-content)" : `var(--${currentActivePageConfig.mainContentClass.replace("text-", "color-")})`
 
-  // 윈도우 컨트롤 버튼 스타일은 CSS에서 처리
+  // window control button styles are handled in CSS
 </script>
 
 <!-- Outermost container. If an overall app background different from main content is needed, apply it here. -->
@@ -501,18 +471,18 @@
     <!-- Window Title Bar -->
     <div class="{windowBarBackgroundClass} {windowBarContentColorClass}">
       <div class="h-8 flex items-center text-xs select-none" data-tauri-drag-region>
-        <!-- 왼쪽 공간 -->
+        <!-- left space -->
         <div class="w-[100px]"></div>
 
-        <!-- 중앙 제목 -->
+        <!-- center title -->
         <div class="absolute left-0 right-0 mx-auto flex justify-center items-center" data-tauri-drag-region>
           <img src="/favicon.png" alt="App Icon" class="w-4 h-4 mr-2" />
           <slot name="title">MCPLINK</slot>
         </div>
 
-        <!-- 투명 버튼 위에 아이콘을 장식으로 배치 -->
+        <!-- transparent buttons above icons are placed as decoration -->
         <div class="ml-auto flex">
-          <!-- 아이콘은 버튼 내부에 절대 위치로 배치하여 장식으로 처리 -->
+          <!-- icons are placed inside the button as absolute position for decoration -->
           <div class="window-btn min-btn" on:click={minimizeWindow}>
             <span class="icon-wrapper">
               <Minus size={16} />
@@ -549,9 +519,9 @@
                 position: relative;
               "
               on:click|preventDefault={() => {
-                // 탭 클릭 시 다른 모든 탭의 활성화 상태를 초기화하고 현재 탭만 활성화
+                // when tab is clicked, initialize the active state of all other tabs and activate only the current tab
                 activeTabPath = tab.path
-                // 부드러운 스크롤 애니메이션 적용
+                // apply smooth scroll animation
                 smoothScrollToTop()
                 goto(tab.path)
               }}
@@ -575,9 +545,9 @@
               position: relative;
             "
             on:click|preventDefault={() => {
-              // 설정 탭 클릭 시 모든 탭 초기화하고 설정 탭만 활성화
+              // when settings tab is clicked, initialize all tabs and activate only the settings tab
               activeTabPath = settingsTab.path
-              // 부드러운 스크롤 애니메이션 적용
+              // apply smooth scroll animation
               smoothScrollToTop()
               goto(settingsTab.path)
             }}
@@ -610,7 +580,7 @@
 </div>
 
 <style>
-  /* 탭 기본 스타일 */
+  /* tab default styles */
   .tab {
     position: relative;
     padding: 10px 15px;
@@ -623,7 +593,7 @@
     color: inherit;
     box-shadow: none;
     transform: none;
-    min-width: 150px; /* "Installed MCP"보다 살짝 넓은 너비 */
+    min-width: 150px; /* slightly wider than "Installed MCP" */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -655,13 +625,13 @@
   }
   /* Add any other global styles or adjustments here */
 
-  /* 윈도우 컨트롤 버튼 스타일 */
+  /* window control button styles */
   .window-btn {
     width: 46px;
     height: 32px;
     background-color: transparent;
-    cursor: default; /* 일반 마우스 커서 유지 */
-    position: relative; /* 아이콘의 기준점 */
+    cursor: default; /* keep default mouse cursor */
+    position: relative; /* base point for icons */
     user-select: none;
   }
 
@@ -674,19 +644,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    pointer-events: none; /* 아이콘은 이벤트를 처리하지 않음 */
+    pointer-events: none; /* icons do not handle events */
   }
 
   .min-btn:hover,
   .max-btn:hover {
-    background-color: oklch(var(--color-base-300)) !important; /* base-300 색상 */
+    background-color: oklch(var(--color-base-300)) !important; /* base-300 color */
   }
 
   .close-btn:hover {
-    background-color: oklch(var(--color-error)) !important; /* error 색상 */
+    background-color: oklch(var(--color-error)) !important; /* error color */
   }
 
-  /* 모든 SVG 아이콘에 대해 포인터 이벤트 차단 */
+  /* block pointer events for all SVG icons */
   svg {
     pointer-events: none;
   }
