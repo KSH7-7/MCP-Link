@@ -1,5 +1,6 @@
 package kr.co.mcplink.domain.mcpsecurity.controller;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequestMapping("/secure")
 @RequiredArgsConstructor
 @Slf4j
+@Profile("!test") // 테스트 할 땐 비활성화
 public class McpSecureController {
 
 	private final McpAnalysisService analysisService;

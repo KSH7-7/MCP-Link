@@ -9,11 +9,13 @@ import kr.co.mcplink.domain.mcpserver.repository.McpServerRepository;
 import kr.co.mcplink.domain.mcpserver.entity.SecurityRank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Profile("!test") // 테스트 할 땐 비활성화
 public class McpJsonParsingService {
 
 	private final ObjectMapper objectMapper;

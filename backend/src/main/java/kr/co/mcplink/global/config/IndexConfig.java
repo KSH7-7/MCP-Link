@@ -4,6 +4,7 @@ import kr.co.mcplink.global.annotation.AutoIndex;
 import kr.co.mcplink.global.common.Constants;
 import kr.co.mcplink.global.util.IndexUtil;
 import org.springframework.context.ApplicationListener;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
 import org.springframework.stereotype.Component;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Component
+@Profile("!test") // 테스트 할 땐 비활성화
 public class IndexConfig
         implements ApplicationListener<ContextRefreshedEvent> {
 
