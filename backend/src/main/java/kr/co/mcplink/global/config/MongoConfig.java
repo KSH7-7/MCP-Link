@@ -9,6 +9,7 @@ import com.mongodb.client.MongoClients;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.convert.Jsr310Converters;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 
 @Configuration
+@Profile("!test") // 테스트 할 땐 비활성화
 @EnableMongoAuditing
 @EnableMongoRepositories(
         basePackages = {
@@ -40,8 +42,8 @@ public class MongoConfig {
     @Value("${mongodb.atlas.uri}")
     private String mongoUri;
 
-    //    @Value("${mongodb.atlas.database}")
-    private final String database = "springlink";
+    @Value("${mongodb.atlas.database}")
+    private String database;
 
     @Bean
     public MongoClient mongoClient() {

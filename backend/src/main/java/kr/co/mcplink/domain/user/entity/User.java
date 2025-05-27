@@ -1,21 +1,14 @@
 package kr.co.mcplink.domain.user.entity;
 
-import java.time.LocalDateTime;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import kr.co.mcplink.global.common.BaseTimeEntity;
 import kr.co.mcplink.global.common.UserRole;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -31,10 +24,10 @@ public class User extends BaseTimeEntity {
 	@Column(name = "name")
 	private String name;
 
-	@Column(name = "email", unique = true, nullable = false)
+	@Column(name = "email", nullable = false)
 	private String email;
 
-	@Column(name = "ssafy_user_id", unique = true)
+	@Column(name = "ssafy_user_id")
 	private String ssafyUserId;
 
 	@Column(name = "nickname")

@@ -7,6 +7,7 @@ import kr.co.mcplink.domain.mcpserver.entity.McpServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Profile("!test") // 테스트 할 땐 비활성화
 public class McpAnalysisService {
 
 	private Path tempDir;

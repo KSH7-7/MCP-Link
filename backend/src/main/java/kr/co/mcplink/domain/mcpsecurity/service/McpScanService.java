@@ -3,6 +3,7 @@ package kr.co.mcplink.domain.mcpsecurity.service;
 import kr.co.mcplink.domain.mcpsecurity.dto.McpScanResultDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Profile("!test") // 테스트 할 땐 비활성화
 public class McpScanService {
 
 	private final McpAnalysisService analysisService;
