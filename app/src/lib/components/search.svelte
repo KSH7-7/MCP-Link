@@ -14,9 +14,6 @@
 
   // Search value
   let searchValue = ""
-  
-  // 프로그래밍적 변경 플래그
-  let isProgrammaticChange = false
 
   // programmatic change flag
   let isProgrammaticChange = false
@@ -48,7 +45,7 @@
 
         // highlight search effect
         setTimeout(() => {
-          const inputElement = document.querySelector('input[type="search"]')
+          const inputElement = document.querySelector('input[type="search"]') as HTMLInputElement
           if (inputElement) {
             inputElement.classList.add("highlight-search")
             // set focus
