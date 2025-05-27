@@ -19,7 +19,7 @@
     try {
       // Use the new ensure_config_files function that creates any missing config files
       await invoke("ensure_config_files")
-      
+
       // Restart Claude Desktop
       await invoke("restart_claude_desktop")
 

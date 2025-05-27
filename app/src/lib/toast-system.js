@@ -1,118 +1,103 @@
-// 알림 시스템 유틸리티 함수
-// Tauri 2.0에서는 import 경로가 변경됨
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { goto } from '$app/navigation';
-import toastStore from './stores/toast';
-import { handleTauriError } from './error-handler';
+// notification system utility functions
+import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
+import { goto } from "$app/navigation"
+import toastStore from "./stores/toast"
+import { handleTauriError } from "./error-handler"
 
-// Tauri의 알림 시스템을 통해 알림 표시
+// display notification via Tauri's notification system
 export async function showNotification(title, body, keyword) {
   return handleTauriError(
     async () => {
-      await invoke('show_notification', { title, body, keyword });
-      return true;
+      await invoke("show_notification", { title, body, keyword })
+      return true
     },
     false,
-    { 
+    {
       showToast: true,
-      position: 'top-right'
+      position: "top-right",
     }
-  );
+  )
 }
 
-// 알림 관련 이벤트 리스너 설정
+// setup notification event listeners
 export async function setupNotificationListeners() {
-  // 탐색 이벤트 리스닝
-  const unlistenNavigate = await listen('navigate-to', (event) => {
-    const url = event.payload;
+  // listen for navigation events
+  const unlistenNavigate = await listen("navigate-to", (event) => {
+    const url = event.payload
     if (url) {
-      goto(url);
+      goto(url)
     }
-  });
+  })
 
-  // MCP 목록 페이지 내 키워드로 검색 이벤트 리스닝
-  const unlistenKeyword = await listen('navigate-to-mcp-list-with-keyword', (event) => {
-    const url = event.payload;
-    if (url && url.includes('keyword=')) {
-      goto(url);
+  // listen for keyword search events in the MCP list page
+  const unlistenKeyword = await listen("navigate-to-mcp-list-with-keyword", (event) => {
+    const url = event.payload
+    if (url && url.includes("keyword=")) {
+      goto(url)
     }
-  });
+  })
 
-  // 리스너 정리 함수 반환
+  // return cleanup function
   return () => {
-    unlistenNavigate();
-    unlistenKeyword();
-  };
+    unlistenNavigate()
+    unlistenKeyword()
+  }
 }
 
-// URI 스킴 처리
+// handle URI scheme
 export async function handleUriScheme(uri) {
   try {
-    // Deep Link 플러그인은 자동으로 URL을 처리합니다.
-    // 추가 처리가 필요한 경우 여기에 코드를 추가할 수 있습니다.
-    return true;
+    // Deep Link plugin automatically handles URLs
+    // additional processing may be needed if needed
+    return true
   } catch (error) {
-    console.error('URI 스킴 처리 실패:', error);
-    return false;
+    return false
   }
 }
 
-// 토스트 시스템 초기화
+// initialize toast system
 export function initToastSystem() {
-  // 전역 이벤트 리스너 추가 
-  document.addEventListener('show-toast', (event) => {
-    const { message, type, duration, position } = event.detail;
-    showToast(message, { type, duration, position });
-  });
-  
+  // add global event listener
+  document.addEventListener("show-toast", (event) => {
+    const { message, type, duration, position } = event.detail
+    showToast(message, { type, duration, position })
+  })
 }
 
-// 토스트 메시지 표시
+// display toast message
 export function showToast(message, options = {}) {
-  const { 
-    title = '',
-    type = 'info', 
-    duration = 3000, 
-    position = 'bottom-center' 
-  } = options;
-  
-  // 로깅
-  if (type === 'error') {
-    console.error('토스트 오류:', message);
-  } else if (type === 'warning') {
-    console.warn('토스트 경고:', message);
-  }
-  
-  // Svelte store 업데이트
-  toastStore.update(state => ({
+  const { title = "", type = "info", duration = 3000, position = "bottom-center" } = options
+
+  // update Svelte store
+  toastStore.update((state) => ({
     ...state,
     show: true,
     title,
     message,
     type,
     duration,
-    position
-  }));
-  
-  // 자동으로 숨기기
+    position,
+  }))
+
+  // automatically hide
   setTimeout(() => {
-    toastStore.update(state => ({
+    toastStore.update((state) => ({
       ...state,
-      show: false
-    }));
-  }, duration);
-  
-  return true;
+      show: false,
+    }))
+  }, duration)
+
+  return true
 }
 
-// 오류 토스트 메시지 표시 (error-handler.ts의 showErrorToast와 기능 중복을 피하기 위해 이름 변경)
+// display error toast message (avoid name duplication with showErrorToast in error-handler.ts)
 export function showSimpleErrorToast(error, options = {}) {
-  const message = error instanceof Error ? error.message : String(error);
-  return showToast(message, { 
-    type: 'error', 
-    duration: 5000, 
-    position: 'bottom-center',
-    ...options 
-  });
+  const message = error instanceof Error ? error.message : String(error)
+  return showToast(message, {
+    type: "error",
+    duration: 5000,
+    position: "bottom-center",
+    ...options,
+  })
 }

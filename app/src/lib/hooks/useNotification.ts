@@ -1,47 +1,43 @@
-import { onMount, onDestroy } from 'svelte';
-import { listen } from '@tauri-apps/api/event';
-import { appWindow } from '@tauri-apps/api/window';
-import type { UnlistenFn } from '@tauri-apps/api/event';
+import { onMount, onDestroy } from "svelte"
+import { listen } from "@tauri-apps/api/event"
+import { appWindow } from "@tauri-apps/api/window"
+import type { UnlistenFn } from "@tauri-apps/api/event"
 
-/**
- * 알림 관련 이벤트를 처리하는 훅
- * 
- * @param onNavigateToMcpList MCP 목록 페이지로 이동 콜백
- */
+// handle notification related events
 export function useNotification(onNavigateToMcpList: (keyword: string) => void) {
-  let unlistenFns: UnlistenFn[] = [];
+  let unlistenFns: UnlistenFn[] = []
 
   onMount(async () => {
-    // 일반 탐색 이벤트 처리
-    const unlisten1 = await listen('navigate-to', (event) => {
-      // 페이지 이동 로직을 여기에 추가할 수 있습니다.
-    });
+    // handle general navigation event
+    const unlisten1 = await listen("navigate-to", (event) => {
+      // implementation needed
+    })
 
-    // MCP 목록 페이지 이동 이벤트 처리
-    const unlisten2 = await listen('navigate-to-mcp-list-with-keyword', (event) => {
-      const url = event.payload as string;
-      if (url && url.includes('keyword=')) {
-        const keyword = url.split('keyword=')[1];
+    // handle MCP list page navigation event
+    const unlisten2 = await listen("navigate-to-mcp-list-with-keyword", (event) => {
+      const url = event.payload as string
+      if (url && url.includes("keyword=")) {
+        const keyword = url.split("keyword=")[1]
         if (keyword) {
-          onNavigateToMcpList(keyword);
+          onNavigateToMcpList(keyword)
         }
       }
-    });
+    })
 
-    // 새 키워드 이벤트 처리
-    const unlisten3 = await listen('new-keywords', (event) => {
-      // 새 키워드 처리 로직을 여기에 추가할 수 있습니다.
-    });
+    // handle new keyword event
+    const unlisten3 = await listen("new-keywords", (event) => {
+      // implementation needed
+    })
 
-    unlistenFns = [unlisten1, unlisten2, unlisten3];
-  });
+    unlistenFns = [unlisten1, unlisten2, unlisten3]
+  })
 
   onDestroy(() => {
-    // 모든 이벤트 리스너 정리
-    unlistenFns.forEach(fn => fn());
-  });
+    // clean up all event listeners
+    unlistenFns.forEach((fn) => fn())
+  })
 
   return {
-    // 필요한 함수를 여기에 추가할 수 있습니다.
-  };
+    // utility functions will be added here as needed
+  }
 }
