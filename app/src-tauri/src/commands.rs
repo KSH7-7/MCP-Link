@@ -1441,11 +1441,6 @@ pub fn check_and_mark_app_activated(app: AppHandle) -> Result<Option<String>, St
         if keyword_path.exists() {
             let _ = std::fs::remove_file(&keyword_path);
         }
-        
-        // 키워드 처리 후 파일 삭제
-        if keyword_path.exists() {
-            let _ = std::fs::remove_file(&keyword_path);
-        }
     }
 
     Ok(final_keyword)
